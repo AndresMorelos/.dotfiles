@@ -479,16 +479,46 @@ cmd_doctor() {
     else
         warn "no signing key pinned yet - run ./install.sh --sync-overlay"
     fi
-    local signers gsign
+    local signers gsign signer
     signers="$(git config gpg.ssh.allowedSignersFile || true)"
     gsign="$(git config commit.gpgsign || echo false)"
+    signer="$(git config gpg.ssh.program || true)"
+
     echo "   gpgsign     $gsign"
+    if [[ -n "$signer" ]]; then
+        if [[ -x "$signer" ]]; then
+            echo "   signer      $signer"
+        else
+            err "gpg.ssh.program points at a missing binary: $signer"
+            echo "         every signed commit will fail; re-run --sync-overlay"
+        fi
+    else
+        echo "   signer      ssh-keygen (no vendor signer)"
+        # ssh-keygen reads SSH_AUTH_SOCK, not ssh_config's IdentityAgent.
+        if [[ -z "${SSH_AUTH_SOCK:-}" || ! -S "${SSH_AUTH_SOCK:-}" ]]; then
+            err "SSH_AUTH_SOCK is not a live socket, so ssh-keygen cannot sign"
+            echo "         open a new shell, or re-run --sync-overlay"
+        fi
+    fi
+
     if [[ "$gsign" == "true" && -n "$signers" && -f "$signers" ]]; then
         ok "signatures verify (allowed_signers present)"
     elif [[ "$gsign" == "true" ]]; then
         err "signing is on but allowed_signers is missing - signatures will not verify"
     else
-        warn "commits are unsigned - run ./install.sh --sync-overlay"
+        # Say WHY it is off, not just that it is.
+        if [[ -z "$DOTFILES_KEY_ITEM" ]]; then
+            warn "unsigned because the overlay has never synced on this machine"
+            if [[ "$DOTFILES_PROFILE" == "work" ]]; then
+                echo "         the vault needs an item called '''dotfiles-overlay''' with an"
+                echo "         '''email''' field. Create it, then: ./install.sh --sync-overlay"
+            else
+                echo "         run: ./install.sh --sync-overlay"
+            fi
+        else
+            warn "unsigned: a key is pinned but ~/.gitconfig.local was not written"
+            echo "         run: ./install.sh --sync-overlay"
+        fi
     fi
     echo
 

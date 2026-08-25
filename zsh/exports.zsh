@@ -21,3 +21,7 @@ command -v fnm >/dev/null && eval "$(fnm env --use-on-cd --version-file-strategy
 
 export STARSHIP_CONFIG="$DOTFILES_DIR/starship/starship.toml"
 command -v starship >/dev/null && eval "$(starship init zsh)"
+
+# Point ssh-keygen (git's signer) at the password manager agent.
+[[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/agent-env.sh" ]] &&
+    source "${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/agent-env.sh"

@@ -101,9 +101,14 @@ provider_agent_socket() {
     printf '%s\n' "$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
 }
 
-# 1Password ships its own SSH signer, which git uses in place of ssh-keygen.
+# 1Password ships its own SSH signer inside the app bundle. If the app is not
+# where we expect, emit nothing: git then falls back to `ssh-keygen -Y sign`,
+# which signs against the same agent. Pointing gpg.ssh.program at a missing
+# binary would break every signed commit instead.
 provider_ssh_sign_program() {
-    printf '%s\n' "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"
+    local signer="/Applications/1Password.app/Contents/MacOS/op-ssh-sign"
+    [[ -x "$signer" ]] && printf '%s\n' "$signer"
+    return 0
 }
 
 provider_uses_agent_toml() { return 0; }
