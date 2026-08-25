@@ -28,6 +28,12 @@ ACTION="bootstrap"
 declare -a SELECTED_GROUPS=()
 declare -a SKIP_GROUPS=()
 
+# Values given on the command line. Kept separate because profile_load reads the
+# stored config into the same variables; an explicit flag must win over it,
+# otherwise a mistake in the saved config could never be corrected.
+CLI_PROFILE="" CLI_SLUG="" CLI_PROVIDER="" CLI_ACCOUNT=""
+CLI_VAULT="" CLI_ITEM="" CLI_KEY_ITEM="" CLI_KEY_VAULT=""
+
 print_help() {
     cat <<EOF
 Usage: ./install.sh [COMMAND] [OPTIONS]
@@ -95,35 +101,35 @@ parse_args() {
             --dump) ACTION="dump" ;;
             --adopt) ACTION="adopt" ;;
             --profile)
-                DOTFILES_PROFILE="${2:?--profile needs a value}"
+                CLI_PROFILE="${2:?--profile needs a value}"
                 shift
                 ;;
             --slug)
-                DOTFILES_SLUG="${2:?--slug needs a value}"
+                CLI_SLUG="${2:?--slug needs a value}"
                 shift
                 ;;
             --provider)
-                DOTFILES_PROVIDER="${2:?--provider needs a value}"
+                CLI_PROVIDER="${2:?--provider needs a value}"
                 shift
                 ;;
             --account)
-                DOTFILES_ACCOUNT="${2:?--account needs a value}"
+                CLI_ACCOUNT="${2:?--account needs a value}"
                 shift
                 ;;
             --vault)
-                DOTFILES_VAULT="${2:?--vault needs a value}"
+                CLI_VAULT="${2:?--vault needs a value}"
                 shift
                 ;;
             --item)
-                DOTFILES_ITEM="${2:?--item needs a value}"
+                CLI_ITEM="${2:?--item needs a value}"
                 shift
                 ;;
             --signing-key-item)
-                DOTFILES_KEY_ITEM="${2:?--signing-key-item needs a value}"
+                CLI_KEY_ITEM="${2:?--signing-key-item needs a value}"
                 shift
                 ;;
             --signing-key-vault)
-                DOTFILES_KEY_VAULT="${2:?--signing-key-vault needs a value}"
+                CLI_KEY_VAULT="${2:?--signing-key-vault needs a value}"
                 shift
                 ;;
             --packages)
@@ -316,9 +322,46 @@ install_oh_my_zsh_plugins() {
 
 # strict=0 for commands that only touch the filesystem: linking needs no vault,
 # so it must not demand provider credentials to run.
+# Apply command-line overrides on top of whatever was stored.
+# Sets CLI_OVERRODE=1 if anything changed. Deliberately NOT called in a command
+# substitution: a subshell would discard every assignment it makes.
+CLI_OVERRODE=0
+apply_cli_overrides() {
+    CLI_OVERRODE=0
+    _override() {
+        local name="$1" cli="$2" current="$3"
+        [[ -z "$cli" || "$cli" == "$current" ]] && return 0
+        eval "$name=\"\$cli\""
+        CLI_OVERRODE=1
+    }
+    _override DOTFILES_PROFILE "$CLI_PROFILE" "$DOTFILES_PROFILE"
+    _override DOTFILES_SLUG "$CLI_SLUG" "$DOTFILES_SLUG"
+    _override DOTFILES_PROVIDER "$CLI_PROVIDER" "$DOTFILES_PROVIDER"
+    _override DOTFILES_ACCOUNT "$CLI_ACCOUNT" "$DOTFILES_ACCOUNT"
+    _override DOTFILES_VAULT "$CLI_VAULT" "$DOTFILES_VAULT"
+    _override DOTFILES_ITEM "$CLI_ITEM" "$DOTFILES_ITEM"
+    _override DOTFILES_KEY_ITEM "$CLI_KEY_ITEM" "$DOTFILES_KEY_ITEM"
+    _override DOTFILES_KEY_VAULT "$CLI_KEY_VAULT" "$DOTFILES_KEY_VAULT"
+    profile_derive
+}
+
 require_profile() {
     local strict="${1:-1}"
-    profile_load || profile_prompt
+    # Seed from the flags so a first run does not re-ask what was already given.
+    DOTFILES_PROFILE="$CLI_PROFILE" DOTFILES_SLUG="$CLI_SLUG"
+    DOTFILES_PROVIDER="$CLI_PROVIDER" DOTFILES_ACCOUNT="$CLI_ACCOUNT"
+    DOTFILES_VAULT="$CLI_VAULT" DOTFILES_ITEM="$CLI_ITEM"
+    DOTFILES_KEY_ITEM="$CLI_KEY_ITEM" DOTFILES_KEY_VAULT="$CLI_KEY_VAULT"
+
+    if profile_load; then
+        apply_cli_overrides
+        if [[ "$CLI_OVERRODE" == "1" ]]; then
+            profile_save >/dev/null
+            ok "machine config updated from the command line"
+        fi
+    else
+        profile_prompt
+    fi
     if [[ "$strict" == "1" ]]; then
         if [[ "$DOTFILES_PROVIDER" == "onepassword" && -z "$DOTFILES_ACCOUNT" ]]; then
             profile_detect_account
