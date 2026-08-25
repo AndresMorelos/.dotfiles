@@ -30,16 +30,20 @@ provider_ready() {
 provider_gui_app() { printf '%s\n' "/Applications/Bitwarden.app"; }
 
 provider_setup_hint() {
-    cat <<EOF
+    cat <<'EOF'
 Bitwarden is installed but this machine is not logged in yet.
 
-On a fresh Mac you still have to do this once, by hand:
+Three things only you can do:
 
-  1. Open Bitwarden and log in
-  2. Settings > enable "SSH agent"
-  3. In a terminal:  bw login
+  1. Open Bitwarden Desktop and log in
+  2. Settings > enable "SSH agent"   (the agent lives in the app, not the CLI)
+  3. bw login                        (needs a SECOND terminal - this one waits)
 
-No secret can be fetched until then — that is the point of the vault.
+Easiest path: type s below to skip, finish the three steps, then run
+  ./install.sh --sync-overlay
+
+The rest of the setup completes either way. No secret can be fetched until
+then - that is the point of the vault.
 EOF
 }
 
