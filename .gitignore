@@ -1,0 +1,12 @@
+.DS_Store
+.atl/
+
+# Machine-local overrides must never be committed.
+*.local
+.dotfiles-local/
+
+# Scratch output from `./install.sh --dump`
+Brewfile.new
+Brewfile.lock.json
+
+known_hosts*

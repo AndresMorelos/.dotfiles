@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Refuse to commit this machine's client identifiers into a repo that must stay
+# neutral. Installed as .git/hooks/pre-commit by `install.sh --link`.
+set -euo pipefail
+
+config="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/config"
+[[ -r "$config" ]] || exit 0
+
+profile=""
+declare -a needles=()
+
+while IFS='=' read -r key value; do
+    [[ -z "${value:-}" ]] && continue
+    case "$key" in
+        profile) profile="$value" ;;
+        # `item` is deliberately excluded: "dotfiles-overlay" is a generic name
+        # the README legitimately documents.
+        slug | vault | account) [[ ${#value} -ge 3 ]] && needles+=("$value") ;;
+    esac
+done <"$config"
+
+# Only enforced on client machines — that is where the leak risk lives.
+[[ "$profile" == "work" ]] || exit 0
+[[ ${#needles[@]} -gt 0 ]] || exit 0
+
+declare -a args=()
+for n in "${needles[@]}"; do args+=(-e "$n"); done
+
+if git diff --cached | rg --fixed-strings --ignore-case --quiet "${args[@]}"; then
+    echo >&2
+    echo "BLOCKED: staged changes contain this machine's client identifiers." >&2
+    echo >&2
+    git diff --cached --name-only | while read -r f; do
+        if git diff --cached -- "$f" | rg --fixed-strings --ignore-case --quiet "${args[@]}"; then
+            echo "  $f" >&2
+        fi
+    done
+    echo >&2
+    echo "This repository is shared across every machine and must stay neutral." >&2
+    echo "Client configuration belongs in the vault, not here." >&2
+    echo >&2
+    echo "Override only if you are certain:  git commit --no-verify" >&2
+    exit 1
+fi
+
+exit 0

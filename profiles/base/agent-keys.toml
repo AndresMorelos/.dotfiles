@@ -1,0 +1,9 @@
+# Neutral dev keys: your own identity, offered on any machine where your
+# personal 1Password account is signed in.
+[[ssh-keys]]
+item = "Github SSH Key"
+vault = "Development"
+
+[[ssh-keys]]
+item = "Bitbucket"
+vault = "Development"

@@ -1,0 +1,18 @@
+# Shared prompt configuration. Lives in the repo so every machine looks the same.
+add_newline = true
+
+[character]
+success_symbol = "[>](bold green)"
+error_symbol = "[>](bold red)"
+
+[git_branch]
+symbol = " "
+
+[nodejs]
+format = "via [$symbol($version )]($style)"
+
+[python]
+format = "via [$symbol($version )]($style)"
+
+[cmd_duration]
+min_time = 2000

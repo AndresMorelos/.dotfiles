@@ -1,0 +1,3 @@
+# Personal-machine apps.
+cask "spotify"
+cask "vnc-viewer"

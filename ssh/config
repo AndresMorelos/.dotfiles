@@ -1,0 +1,7 @@
+# Neutral base. The agent socket is provider-specific, so it lives in the
+# generated include below. `Include` comes first because ssh is first-match-wins.
+Include ~/.ssh/config.local
+
+Host *
+	AddKeysToAgent yes
+	ServerAliveInterval 60

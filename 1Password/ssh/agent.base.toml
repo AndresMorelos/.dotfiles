@@ -1,0 +1,9 @@
+# 1Password SSH agent configuration.
+#
+# This file is assembled by install.sh from:
+#   1Password/ssh/agent.base.toml       (this header)
+#   profiles/base/agent-keys.toml       (dev keys that travel with you)
+#   the active profile's or overlay's key fragment
+#
+# Do not edit ~/.config/1Password/ssh/agent.toml directly — it is regenerated.
+# Reference: https://developer.1password.com/docs/ssh/agent/config

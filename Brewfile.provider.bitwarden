@@ -1,0 +1,3 @@
+# Only installed on machines whose profile uses Bitwarden.
+cask "bitwarden"
+brew "bitwarden-cli"

@@ -1,0 +1,7 @@
+# Personal-machine keys only. Never mounted on a client machine.
+[[ssh-keys]]
+item = "Pi SSH Key"
+vault = "Home Services"
+
+[[ssh-keys]]
+vault = "Personal"

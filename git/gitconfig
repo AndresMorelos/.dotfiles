@@ -1,0 +1,45 @@
+# Neutral base. No identity, no password-manager specifics.
+#
+# Identity arrives entirely via the generated includes at the bottom.
+
+[core]
+	excludesfile = ~/.gitignore_global
+
+[init]
+	defaultBranch = main
+
+[gpg]
+	format = ssh
+
+[commit]
+	gpgsign = true
+
+[protocol "file"]
+	allow = always
+
+[push]
+	autoSetupRemote = true
+
+[fetch]
+	prune = true
+
+[pull]
+	rebase = true
+
+# Enforce SSH
+[url "ssh://git@github.com/"]
+	insteadOf = https://github.com/
+[url "ssh://git@gitlab.com/"]
+	insteadOf = https://gitlab.com/
+[url "ssh://git@bitbucket.org/"]
+	insteadOf = https://bitbucket.org/
+
+# Both includes are generated with absolute paths, so this repository works
+# from any location. Neither exists until install.sh has run.
+#   ~/.gitconfig.base.local  written by --link      : personal identity
+#   ~/.gitconfig.local       written by --sync-overlay : signing key, client includeIf
+[include]
+	path = ~/.gitconfig.base.local
+
+[include]
+	path = ~/.gitconfig.local

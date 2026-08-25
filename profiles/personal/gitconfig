@@ -1,0 +1,6 @@
+# Personal identity. No signingkey here on purpose: it is resolved from the
+# vault at install time and written to ~/.gitconfig.local, so rotating the key
+# needs no edit to this file.
+[user]
+	email = 6563162+AndresMorelos@users.noreply.github.com
+	name = Andres Morelos
