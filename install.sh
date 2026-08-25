@@ -479,12 +479,31 @@ cmd_doctor() {
     else
         warn "no signing key pinned yet - run ./install.sh --sync-overlay"
     fi
-    local signers gsign signer
+    local signers gsign signer workdir
     signers="$(git config gpg.ssh.allowedSignersFile || true)"
     gsign="$(git config commit.gpgsign || echo false)"
     signer="$(git config gpg.ssh.program || true)"
 
-    echo "   gpgsign     $gsign"
+    # On a client machine the interesting values live INSIDE the work directory;
+    # reading them from here reports the deliberate global "off" and looks broken.
+    if [[ "$DOTFILES_PROFILE" == "work" && -f "$HOME/.gitconfig.local" ]]; then
+        workdir="$(rg -o 'gitdir:(.+)"' -r '$1' "$HOME/.gitconfig.local" 2>/dev/null | head -1)"
+        if [[ -n "$workdir" && -d "$workdir" ]]; then
+            echo "   workdir     ${workdir/#$HOME/~}"
+            local in_gsign in_email
+            in_gsign="$(git -C "$workdir" config commit.gpgsign 2>/dev/null || echo false)"
+            in_email="$(git -C "$workdir" config user.email 2>/dev/null || true)"
+            signers="$(git -C "$workdir" config gpg.ssh.allowedSignersFile 2>/dev/null || true)"
+            signer="$(git -C "$workdir" config gpg.ssh.program 2>/dev/null || true)"
+            echo "   inside      $in_email  gpgsign=$in_gsign"
+            echo "   outside     gpgsign=$gsign  (intentional: the personal key is not on this machine)"
+            gsign="$in_gsign"
+        else
+            warn "work directory ${workdir:-?} does not exist yet"
+        fi
+    else
+        echo "   gpgsign     $gsign"
+    fi
     if [[ -n "$signer" ]]; then
         if [[ -x "$signer" ]]; then
             echo "   signer      $signer"
