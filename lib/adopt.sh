@@ -13,8 +13,13 @@ adopt_detect_git() {
 
     # A previous run may have displaced the original; it is still in the backup.
     if [[ -z "$ADOPT_EMAIL" ]]; then
-        local candidate
-        candidate="$(find "$DOTFILES_BACKUP_ROOT" -name '.gitconfig' -type f 2>/dev/null | sort | tail -1)"
+        local candidate=""
+        # Guarded: with `set -o pipefail`, a search over a directory that does
+        # not exist yet fails the whole pipeline and kills the run - which is
+        # exactly the state of a machine that has never been linked.
+        if [[ -d "$DOTFILES_BACKUP_ROOT" ]]; then
+            candidate="$(fd -H -t f '^\.gitconfig$' "$DOTFILES_BACKUP_ROOT" 2>/dev/null | sort | tail -1 || true)"
+        fi
         if [[ -n "$candidate" ]]; then
             ADOPT_EMAIL="$(git config --file "$candidate" user.email 2>/dev/null || true)"
             ADOPT_NAME="$(git config --file "$candidate" user.name 2>/dev/null || true)"
@@ -108,6 +113,19 @@ cmd_adopt() {
     adopt_detect_git
     adopt_detect_provider
 
+    # --- profile ------------------------------------------------------------
+    info "Machine profile"
+    if profile_load; then
+        ok "already configured: profile=$DOTFILES_PROFILE provider=$DOTFILES_PROVIDER"
+    else
+        [[ -z "$DOTFILES_PROVIDER" && -n "$ADOPT_PROVIDER" ]] && {
+            DOTFILES_PROVIDER="$ADOPT_PROVIDER"
+            ok "detected password manager: $ADOPT_PROVIDER"
+        }
+        profile_prompt
+    fi
+    echo
+
     # --- identity -----------------------------------------------------------
     info "Git identity"
     if [[ -n "$ADOPT_EMAIL" ]]; then
@@ -116,8 +134,20 @@ cmd_adopt() {
         echo "   signingkey  ${ADOPT_SIGNKEY:0:40}${ADOPT_SIGNKEY:+...}"
         local repo_email
         repo_email="$(git config --file "$DOTFILES_DIR/profiles/personal/gitconfig" user.email || true)"
-        if [[ "$ADOPT_EMAIL" != "$repo_email" ]]; then
+
+        # profiles/personal/gitconfig is TRACKED and the repo is public. Writing
+        # a work address there would publish it, which is the one thing this
+        # whole design exists to prevent. Only ever offer it on a personal
+        # machine, where the detected address is the personal one by definition.
+        if [[ "$DOTFILES_PROFILE" == "work" ]]; then
+            if [[ "$ADOPT_EMAIL" != "$repo_email" ]]; then
+                ok "work address stays out of the repo (it belongs in the vault)"
+                echo "         put it in the overlay item's email field instead"
+            fi
+        elif [[ "$ADOPT_EMAIL" != "$repo_email" ]]; then
             warn "profiles/personal/gitconfig says $repo_email"
+            echo "         this file is COMMITTED to a public repo - only your own"
+            echo "         personal address belongs here"
             printf '   Update the repo to use %s instead? [y/N] ' "$ADOPT_EMAIL"
             local reply
             read -r reply || reply=n
@@ -132,19 +162,6 @@ cmd_adopt() {
         fi
     else
         warn "no git identity configured yet"
-    fi
-    echo
-
-    # --- profile ------------------------------------------------------------
-    info "Machine profile"
-    if profile_load; then
-        ok "already configured: profile=$DOTFILES_PROFILE provider=$DOTFILES_PROVIDER"
-    else
-        [[ -z "$DOTFILES_PROVIDER" && -n "$ADOPT_PROVIDER" ]] && {
-            DOTFILES_PROVIDER="$ADOPT_PROVIDER"
-            ok "detected password manager: $ADOPT_PROVIDER"
-        }
-        profile_prompt
     fi
     echo
 
