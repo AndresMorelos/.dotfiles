@@ -16,6 +16,11 @@ provider_require() {
 }
 
 # Non-fatal probe: "locked" still counts as ready, we can unlock interactively.
+provider_accounts() { :; }
+
+# Bitwarden CLI cannot filter by item category, so there is nothing to offer.
+provider_list_keys() { :; }
+
 provider_ready() {
     local s
     s="$(bw status 2>/dev/null | jq -r '.status // "unauthenticated"')"
@@ -80,6 +85,7 @@ provider_fetch() {
         jq -er --arg f "$1" '.fields[]? | select(.name == $f) | .value' 2>/dev/null
 }
 
+# provider_pubkey <item> [vault]  -- Bitwarden has no vault dimension here.
 provider_pubkey() {
     bw get item "$1" --session "$BW_SESSION" 2>/dev/null |
         jq -er '.sshKey.publicKey' 2>/dev/null

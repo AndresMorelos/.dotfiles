@@ -21,6 +21,8 @@ DOTFILES_PROVIDER=""
 DOTFILES_ACCOUNT=""
 DOTFILES_VAULT=""
 DOTFILES_ITEM=""
+DOTFILES_KEY_ITEM=""
+DOTFILES_KEY_VAULT=""
 DOTFILES_LOCAL=""
 
 # Read the config file into the DOTFILES_* variables. Returns 1 if absent.
@@ -40,6 +42,8 @@ profile_load() {
             account) DOTFILES_ACCOUNT="$value" ;;
             vault) DOTFILES_VAULT="$value" ;;
             item) DOTFILES_ITEM="$value" ;;
+            key_item) DOTFILES_KEY_ITEM="$value" ;;
+            key_vault) DOTFILES_KEY_VAULT="$value" ;;
             *) ;; # unknown key: ignore rather than fail
         esac
     done <"$DOTFILES_CONFIG_FILE"
@@ -68,6 +72,8 @@ profile_save() {
         [[ -n "$DOTFILES_ACCOUNT" ]] && echo "account=$DOTFILES_ACCOUNT"
         [[ -n "$DOTFILES_VAULT" ]] && echo "vault=$DOTFILES_VAULT"
         [[ -n "$DOTFILES_ITEM" ]] && echo "item=$DOTFILES_ITEM"
+        [[ -n "$DOTFILES_KEY_ITEM" ]] && echo "key_item=$DOTFILES_KEY_ITEM"
+        [[ -n "$DOTFILES_KEY_VAULT" ]] && echo "key_vault=$DOTFILES_KEY_VAULT"
     } >"$DOTFILES_CONFIG_FILE"
     chmod 600 "$DOTFILES_CONFIG_FILE"
     profile_derive
@@ -99,6 +105,44 @@ profile_validate() {
     return 0
 }
 
+# 1Password already knows which accounts are signed in on this machine, so
+# there is no reason to make the user retype one.
+profile_detect_account() {
+    command -v op >/dev/null 2>&1 || {
+        printf '1Password account sign-in address (e.g. my.1password.com): '
+        read -r DOTFILES_ACCOUNT
+        return 0
+    }
+
+    local -a accounts=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && accounts+=("$line")
+    done < <(op account list --format=json 2>/dev/null | jq -r '.[].url' 2>/dev/null)
+
+    case ${#accounts[@]} in
+        0)
+            printf '1Password account sign-in address (e.g. my.1password.com): '
+            read -r DOTFILES_ACCOUNT
+            ;;
+        1)
+            DOTFILES_ACCOUNT="${accounts[0]}"
+            ok "Detected 1Password account: $DOTFILES_ACCOUNT"
+            ;;
+        *)
+            echo "Several 1Password accounts are signed in here:"
+            local i=1
+            for line in "${accounts[@]}"; do
+                echo "  $i) $line"
+                i=$((i + 1))
+            done
+            printf 'Which one backs this machine? [1] '
+            read -r reply
+            [[ -z "$reply" ]] && reply=1
+            DOTFILES_ACCOUNT="${accounts[$((reply - 1))]}"
+            ;;
+    esac
+}
+
 # First-run interactive setup. Only asks what was not supplied on the CLI.
 profile_prompt() {
     info "No machine profile found. Let's set one up."
@@ -128,10 +172,7 @@ profile_prompt() {
     fi
 
     if [[ "$DOTFILES_PROVIDER" == "onepassword" ]]; then
-        [[ -z "$DOTFILES_ACCOUNT" ]] && {
-            printf '1Password account sign-in address (e.g. my.1password.com): '
-            read -r DOTFILES_ACCOUNT
-        }
+        [[ -z "$DOTFILES_ACCOUNT" ]] && profile_detect_account
         if [[ "$DOTFILES_PROFILE" == "work" && -z "$DOTFILES_VAULT" ]]; then
             printf '1Password vault holding this client'"'"'s dotfiles-overlay item: '
             read -r DOTFILES_VAULT

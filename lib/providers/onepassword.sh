@@ -12,6 +12,19 @@ provider_require() {
         die "1Password CLI not found. Install it with: brew install 1password-cli"
 }
 
+# Sign-in addresses of every account this machine already knows about.
+provider_accounts() {
+    op account list --format=json 2>/dev/null | jq -r '.[].url' 2>/dev/null
+}
+
+# SSH-key items we can see, as "vault<TAB>title" lines.
+provider_list_keys() {
+    local -a args=(item list --categories "SSH Key" --format json)
+    [[ -n "$DOTFILES_ACCOUNT" ]] && args+=(--account "$DOTFILES_ACCOUNT")
+    [[ -n "${1:-}" ]] && args+=(--vault "$1")
+    op "${args[@]}" 2>/dev/null | jq -r '.[] | "\(.vault.name)\t\(.title)"' 2>/dev/null
+}
+
 # Non-fatal probe: can we actually reach this account right now?
 provider_ready() {
     op --account "$DOTFILES_ACCOUNT" vault list >/dev/null 2>&1
@@ -58,19 +71,25 @@ provider_fetch() {
         jq -er --arg f "$1" '.fields[]? | select(.label == $f or .id == $f) | .value' 2>/dev/null
 }
 
+# provider_pubkey <item> [vault]
 provider_pubkey() {
-    op read --account "$DOTFILES_ACCOUNT" "op://$DOTFILES_VAULT/$1/public key" 2>/dev/null
+    local vault="${2:-$DOTFILES_VAULT}"
+    [[ -n "$vault" ]] || return 1
+    op read --account "$DOTFILES_ACCOUNT" "op://$vault/$1/public key" 2>/dev/null
 }
 
 provider_supports_keygen() { return 0; }
 
 # `--category ssh` generates an Ed25519 pair inside the vault; the private half
 # never reaches this machine. https://developer.1password.com/docs/cli/ssh-keys/
+# provider_create_key <item> [vault]
 provider_create_key() {
+    local vault="${2:-$DOTFILES_VAULT}"
+    [[ -n "$vault" ]] || die "cannot create a signing key without a vault"
     op item create \
         --category ssh \
         --title "$1" \
-        --vault "$DOTFILES_VAULT" \
+        --vault "$vault" \
         --account "$DOTFILES_ACCOUNT" >/dev/null
 }
 

@@ -44,9 +44,11 @@ Profile options (persisted to ~/.config/dotfiles/config, never committed):
   --profile personal|work
   --slug NAME               Short client name. Local only. Work profiles only.
   --provider onepassword|bitwarden
-  --account ADDRESS         1Password sign-in address, e.g. my.1password.com
+  --account ADDRESS         1Password sign-in address (auto-detected if only one)
   --vault NAME              1Password vault holding the overlay
   --item NAME               Bitwarden item name (default: dotfiles-overlay)
+  --signing-key-item NAME   Reuse an existing SSH-key item instead of creating one
+  --signing-key-vault NAME  Vault holding that key
 
 Package options:
   --packages GROUPS         Comma-separated groups to install
@@ -111,6 +113,14 @@ parse_args() {
                 ;;
             --item)
                 DOTFILES_ITEM="${2:?--item needs a value}"
+                shift
+                ;;
+            --signing-key-item)
+                DOTFILES_KEY_ITEM="${2:?--signing-key-item needs a value}"
+                shift
+                ;;
+            --signing-key-vault)
+                DOTFILES_KEY_VAULT="${2:?--signing-key-vault needs a value}"
                 shift
                 ;;
             --packages)
@@ -291,6 +301,10 @@ require_profile() {
     local strict="${1:-1}"
     profile_load || profile_prompt
     if [[ "$strict" == "1" ]]; then
+        if [[ "$DOTFILES_PROVIDER" == "onepassword" && -z "$DOTFILES_ACCOUNT" ]]; then
+            profile_detect_account
+            profile_save >/dev/null
+        fi
         profile_validate
     else
         case "$DOTFILES_PROFILE" in

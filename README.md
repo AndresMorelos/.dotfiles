@@ -128,6 +128,21 @@ out under your personal address.
 The private key lives in the vault and never touches disk — that is the whole point of
 the SSH agent. "Generate if missing" therefore means *create an item in the vault*:
 
+**An existing key is always preferred over a new one.** The installer lists the SSH-key
+items it can see and reuses one rather than minting a second key you would have to
+register everywhere again. Your choice is pinned in `~/.config/dotfiles/config`
+(`key_item` / `key_vault`), or set it up front:
+
+```sh
+./install.sh --sync-overlay \
+    --signing-key-item "Github SSH Key" --signing-key-vault Development
+```
+
+With several keys and no terminal attached it refuses to guess — picking the wrong
+signing key is silent and long-lived.
+
+Only when no key exists at all does it create one:
+
 - **1Password** — created automatically with `op item create --category ssh`
   ([docs](https://developer.1password.com/docs/cli/ssh-keys/)). A fresh personal Mac
   provisions its own signing key with no manual step.

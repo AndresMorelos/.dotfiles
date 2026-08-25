@@ -28,11 +28,80 @@ _write_generated() {
 
 # ---------------------------------------------------------------- signing key
 
-# Echoes the public key on stdout. Everything else goes to stderr.
-overlay_ensure_signing_key() {
-    local item="$1" pub
+# Find the key this machine should sign with, preferring one that ALREADY
+# exists. Creating a second key when a perfectly good one is sitting in the
+# vault just means another key to register on every forge.
+#
+# Sets DOTFILES_KEY_ITEM / DOTFILES_KEY_VAULT and persists them.
+overlay_resolve_signing_key() {
+    local default_item="$1" default_vault="$2"
 
-    if pub="$(provider_pubkey "$item")" && [[ -n "$pub" && "$pub" != "null" ]]; then
+    # Already pinned by a previous run or by an explicit flag.
+    if [[ -n "$DOTFILES_KEY_ITEM" ]]; then
+        [[ -z "$DOTFILES_KEY_VAULT" ]] && DOTFILES_KEY_VAULT="$default_vault"
+        return 0
+    fi
+
+    local -a keys=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && keys+=("$line")
+    done < <(provider_list_keys 2>/dev/null)
+
+    case ${#keys[@]} in
+        0)
+            DOTFILES_KEY_ITEM="$default_item"
+            DOTFILES_KEY_VAULT="$default_vault"
+            ;;
+        1)
+            DOTFILES_KEY_VAULT="${keys[0]%%$'\t'*}"
+            DOTFILES_KEY_ITEM="${keys[0]#*$'\t'}"
+            ok "Reusing existing signing key: $DOTFILES_KEY_ITEM (vault $DOTFILES_KEY_VAULT)" >&2
+            ;;
+        *)
+            # Picking the wrong signing key is silent and long-lived, so never
+            # guess one without a human at the keyboard.
+            if [[ ! -t 0 ]]; then
+                err "Several SSH keys exist; refusing to guess without a terminal."
+                err "Re-run interactively, or pass:"
+                err "  ./install.sh --sync-overlay --signing-key-item NAME --signing-key-vault VAULT"
+                provider_list_keys | while IFS=$'\t' read -r v t; do
+                    printf '    --signing-key-item "%s" --signing-key-vault "%s"\n' "$t" "$v" >&2
+                done
+                exit 1
+            fi
+            echo >&2
+            info "Existing SSH keys in your vault:" >&2
+            local i=1 line
+            for line in "${keys[@]}"; do
+                printf '  %d) %s   [vault: %s]\n' "$i" "${line#*$'\t'}" "${line%%$'\t'*}" >&2
+                i=$((i + 1))
+            done
+            printf '  %d) create a new one called %s\n' "$i" "$default_item" >&2
+            echo >&2
+            printf 'Which key should sign your commits? [1] ' >&2
+            local reply
+            read -r reply || reply=1
+            [[ -z "$reply" ]] && reply=1
+            if [[ "$reply" == "$i" ]]; then
+                DOTFILES_KEY_ITEM="$default_item"
+                DOTFILES_KEY_VAULT="$default_vault"
+            else
+                line="${keys[$((reply - 1))]}"
+                DOTFILES_KEY_VAULT="${line%%$'\t'*}"
+                DOTFILES_KEY_ITEM="${line#*$'\t'}"
+            fi
+            ;;
+    esac
+
+    profile_save >/dev/null
+}
+
+# Echoes the public key on stdout. Everything else goes to stderr.
+# overlay_ensure_signing_key <item> [vault]
+overlay_ensure_signing_key() {
+    local item="$1" vault="${2:-}" pub
+
+    if pub="$(provider_pubkey "$item" "$vault")" && [[ -n "$pub" && "$pub" != "null" ]]; then
         printf '%s' "$pub"
         return 0
     fi
@@ -45,12 +114,12 @@ overlay_ensure_signing_key() {
     fi
 
     step "No signing key found — creating '$item' in the vault..." >&2
-    provider_create_key "$item" >&2 || {
+    provider_create_key "$item" "$vault" >&2 || {
         err "Could not create the signing key"
         return 1
     }
 
-    pub="$(provider_pubkey "$item")" || {
+    pub="$(provider_pubkey "$item" "$vault")" || {
         err "Key created but its public half could not be read back"
         return 1
     }
@@ -196,14 +265,14 @@ overlay_sync() {
 
 overlay_sync_personal() {
     local sign_program="$1"
-    local key_item="${DOTFILES_SIGNING_KEY_ITEM:-git-signing-key}"
     local allowed_signers="$DOTFILES_CONFIG_DIR/allowed_signers"
     local email pub
 
     email="$(git config --file "$DOTFILES_DIR/profiles/personal/gitconfig" user.email || true)"
     [[ -n "$email" ]] || die "profiles/personal/gitconfig has no user.email"
 
-    if ! pub="$(overlay_ensure_signing_key "$key_item")"; then
+    overlay_resolve_signing_key "git-signing-key" "${DOTFILES_VAULT:-Private}"
+    if ! pub="$(overlay_ensure_signing_key "$DOTFILES_KEY_ITEM" "$DOTFILES_KEY_VAULT")"; then
         die "Cannot continue without a signing key"
     fi
 
@@ -248,7 +317,8 @@ overlay_sync_work() {
     [[ "$workdir" != */ ]] && workdir="$workdir/"
     mkdir -p "$workdir"
 
-    if ! pub="$(overlay_ensure_signing_key "$key_item")"; then
+    overlay_resolve_signing_key "$key_item" "$DOTFILES_VAULT"
+    if ! pub="$(overlay_ensure_signing_key "$DOTFILES_KEY_ITEM" "$DOTFILES_KEY_VAULT")"; then
         die "Cannot continue without a signing key"
     fi
 
