@@ -297,12 +297,30 @@ cleanup_brew() {
 
 # ----------------------------------------------------------------------- zsh
 
+# The one question worth asking. A bare ~/.oh-my-zsh directory proves nothing:
+# a half-finished clone leaves one behind, and .zshrc sources the file, not the
+# directory. Asking anything else here lets an install report success while
+# every new shell reports failure.
+oh_my_zsh_installed() {
+    [[ -f "$HOME/.oh-my-zsh/oh-my-zsh.sh" ]]
+}
+
 install_oh_my_zsh() {
     info "Checking Oh My Zsh..."
-    if [[ -d "$HOME/.oh-my-zsh" ]]; then
+    if oh_my_zsh_installed; then
         ok "already installed"
         return 0
     fi
+
+    # The upstream installer refuses to touch an existing directory, so a broken
+    # one would make every future run fail the same way. Move it aside instead.
+    if [[ -e "$HOME/.oh-my-zsh" ]]; then
+        local wrecked="$HOME/.oh-my-zsh.broken.$(date +%Y%m%d%H%M%S)"
+        warn "~/.oh-my-zsh exists but has no oh-my-zsh.sh; it is incomplete"
+        mv "$HOME/.oh-my-zsh" "$wrecked"
+        echo "         moved to ${wrecked/#$HOME/~}"
+    fi
+
     step "Installing Oh My Zsh..."
     # env -u ZSH: the installer reads $ZSH from the environment, and our own
     # .zshrc exports it. Inheriting it makes the installer refuse to run.
@@ -313,7 +331,7 @@ install_oh_my_zsh() {
         "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" \
         "" --unattended 2>&1)" || true
 
-    if [[ ! -f "$HOME/.oh-my-zsh/oh-my-zsh.sh" ]]; then
+    if ! oh_my_zsh_installed; then
         err "Oh My Zsh did not install. Installer said:"
         printf '%s\n' "$log" | tail -12 >&2
         die "fix the above, then re-run ./install.sh"
@@ -324,14 +342,25 @@ install_oh_my_zsh() {
 install_oh_my_zsh_plugins() {
     info "Checking Oh My Zsh plugins..."
     local custom="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
-    local dir="$custom/plugins/zsh-npm-scripts-autocomplete"
-    if [[ -d "$dir" ]]; then
-        ok "zsh-npm-scripts-autocomplete already installed"
+    local name="zsh-npm-scripts-autocomplete"
+    local dir="$custom/plugins/$name"
+
+    # Same rule as oh-my-zsh itself: the entry file is the proof, not the
+    # directory. An interrupted clone leaves a directory that would otherwise
+    # be mistaken for a finished install on every later run.
+    if [[ -f "$dir/$name.plugin.zsh" ]]; then
+        ok "$name already installed"
         return 0
     fi
-    step "Cloning zsh-npm-scripts-autocomplete..."
-    git clone --depth 1 https://github.com/grigorii-zander/zsh-npm-scripts-autocomplete.git \
-        "$dir" >/dev/null 2>&1 || warn "clone failed"
+    rm -rf "$dir"
+
+    step "Cloning $name..."
+    if ! git clone --depth 1 "https://github.com/grigorii-zander/$name.git" \
+        "$dir" >/dev/null 2>&1; then
+        rm -rf "$dir"
+        warn "$name could not be cloned; zsh will start without it"
+        return 0
+    fi
     ok "plugins ready"
 }
 
@@ -419,7 +448,7 @@ cmd_bootstrap() {
 
 cmd_link() {
     require_profile 0
-    [[ -d "$HOME/.oh-my-zsh" ]] || warn "oh-my-zsh is not installed; run ./install.sh to complete the setup"
+    oh_my_zsh_installed || warn "oh-my-zsh is not installed; run ./install.sh to complete the setup"
     links_apply
 }
 
@@ -431,7 +460,7 @@ cmd_update() {
     overlay_sync
     install_brew_packages
     info "Updating Oh My Zsh..."
-    [[ -d "$HOME/.oh-my-zsh" ]] && "$HOME/.oh-my-zsh/tools/upgrade.sh" >/dev/null 2>&1 || true
+    oh_my_zsh_installed && "$HOME/.oh-my-zsh/tools/upgrade.sh" >/dev/null 2>&1 || true
     cleanup_brew
     ok "Update complete."
 }
