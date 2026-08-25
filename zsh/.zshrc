@@ -84,8 +84,15 @@ fi
 
 # export MANPATH="/usr/local/man:$MANPATH"
 
-# You may need to manually set your language environment
-# export LANG=en_US.UTF-8
+# Language environment.
+#
+# macOS derives LANG from the Language & Region panel, and some valid
+# combinations (en_CO among them) have no UNIX locale at all. A terminal that
+# inherits one of those gets a broken LANG and every locale-aware tool warns
+# about it, so fall back to a locale that is guaranteed to exist.
+if ! locale -a 2>/dev/null | grep -qx "${LANG%.*}.UTF-8"; then
+    export LANG=en_US.UTF-8
+fi
 
 # Preferred editor for local and remote sessions
 # if [[ -n $SSH_CONNECTION ]]; then
