@@ -8,6 +8,9 @@
 DOTFILES_BACKUP_ROOT="$HOME/.dotfiles-backup"
 _backup_dir=""
 
+# iTerm re-reads this file the moment it changes, so no restart is needed.
+ITERM_DYNAMIC_PROFILE="$HOME/Library/Application Support/iTerm2/DynamicProfiles/dotfiles.json"
+
 # Created lazily so a fully idempotent run leaves no empty backup directories.
 _ensure_backup_dir() {
     if [[ -z "$_backup_dir" ]]; then
@@ -53,6 +56,7 @@ links_apply() {
     link "zsh/.zprofile" "$HOME/.zprofile"
     link "git/gitconfig" "$HOME/.gitconfig"
     link "ssh/config" "$HOME/.ssh/config"
+    link "iterm/profile.json" "$ITERM_DYNAMIC_PROFILE"
 
     mkdir -p "$HOME/Dev"
     chmod 700 "$HOME/.ssh" 2>/dev/null || true
@@ -60,6 +64,7 @@ links_apply() {
     links_write_git_base
     links_install_git_hooks
     claude_settings_apply
+    iterm_defaults_apply
 
     if [[ -n "$_backup_dir" ]]; then
         info "Replaced files were saved to ${_backup_dir/#$HOME/~}"
@@ -117,6 +122,7 @@ links_check() {
         "zsh/.zprofile:$HOME/.zprofile"
         "git/gitconfig:$HOME/.gitconfig"
         "ssh/config:$HOME/.ssh/config"
+        "iterm/profile.json:$ITERM_DYNAMIC_PROFILE"
     )
     local rc=0 entry src dst
     for entry in "${pairs[@]}"; do

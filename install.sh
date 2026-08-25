@@ -23,6 +23,8 @@ source "$DOTFILES_DIR/lib/overlay.sh"
 source "$DOTFILES_DIR/lib/adopt.sh"
 # shellcheck source=lib/claude.sh
 source "$DOTFILES_DIR/lib/claude.sh"
+# shellcheck source=lib/iterm.sh
+source "$DOTFILES_DIR/lib/iterm.sh"
 
 ALL_GROUPS=(dev productivity macos streaming fonts)
 

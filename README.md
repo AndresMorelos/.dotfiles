@@ -279,6 +279,38 @@ would discard those edits, so a checksum is recorded: if the file changed since 
 last generated, `--link` names the drifted keys, keeps a copy in `~/.dotfiles-backup/`,
 and tells you which of the two files to move them into.
 
+## Terminal
+
+iTerm2 is configured in two pieces, because iTerm keeps profile settings and
+application settings in different places.
+
+`iterm/profile.json` is an iTerm **Dynamic Profile**, symlinked to
+`~/Library/Application Support/iTerm2/DynamicProfiles/dotfiles.json`. iTerm
+re-reads that file the moment it changes, so editing it takes effect without a
+restart. It carries the colours (Tokyo Night Storm, matching the LazyVim
+default), the font, cursor, scrollback and key handling.
+
+`lib/iterm.sh` writes the handful of settings that have no profile equivalent —
+tab style, scrollbars, clipboard, update checks — with `defaults write`, and
+points `Default Bookmark Guid` at the tracked profile so new windows actually
+use it.
+
+The preferences plist itself is deliberately **not** tracked. It is binary,
+iTerm rewrites it whenever a window moves, and it carries machine state that has
+no business in a neutral repo.
+
+Two things to know:
+
+- iTerm keeps its preferences in memory and flushes them on quit, so anything
+  written while it is running is discarded. `--link` detects a running iTerm and
+  refuses instead of reporting a success that will not survive. Quit iTerm
+  completely, run `./install.sh --link`, then reopen it.
+- The profile asks for `FiraCodeNFM-Reg`, installed by the `fonts` package
+  group. Without a Nerd Font the prompt's glyphs render as empty boxes.
+
+The prompt itself is [Starship](https://starship.rs), configured in
+`starship/starship.toml` and shared by every machine.
+
 ## Tests
 
 ```sh
@@ -303,6 +335,7 @@ lib/log.sh                     output helpers
 lib/profile.sh                 machine profile (~/.config/dotfiles/config)
 lib/links.sh                   declarative symlink table, backup-then-link
 lib/overlay.sh                 vault -> machine-local materialization
+lib/iterm.sh                   iTerm2 app-level settings via `defaults`
 lib/providers/{onepassword,bitwarden}.sh
 Brewfile                       base packages
 Brewfile.<group>               optional groups
@@ -310,6 +343,7 @@ Brewfile.provider.<provider>   the password manager app + CLI
 profiles/base/                 dev keys that travel with you
 profiles/personal/             personal identity, apps, shell
 zsh/, git/, ssh/, starship/    the actual dotfiles
+iterm/profile.json             iTerm2 Dynamic Profile (colours, font, keys)
 hooks/pre-commit               neutrality guard
 tests/overlay.test.sh
 ```
