@@ -18,10 +18,13 @@ brew "fnm"
 brew "pyenv"
 
 # Core tooling
+brew "gh"          # required to clone this private repo on a new Mac
+brew "shellcheck"  # required by the lint step in README
 brew "git"
 brew "git-lfs"
 brew "gnupg"
 brew "wget"
 brew "yarn"
+brew "pnpm"
 
 cask "appcleaner"

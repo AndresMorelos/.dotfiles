@@ -1,3 +1,3 @@
-# Personal-machine apps.
-cask "spotify"
-cask "vnc-viewer"
+# Personal-machine-only apps.
+# Anything that belongs to a package group lives in that group's Brewfile,
+# not here, so it is never installed twice.

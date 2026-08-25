@@ -28,11 +28,20 @@ both supported, including two separate 1Password accounts on the same machine.
 
 ## Install
 
+This repository is **private, and should stay that way** — its vault names map out
+where your secrets live. A new Mac has no SSH key yet, so clone over GitHub's device
+flow instead of making it public:
+
 ```sh
-git clone git@github.com:AndresMorelos/.dotfiles ~/.dotfiles
+brew install gh
+gh auth login                                     # opens a browser, no SSH needed
+gh repo clone AndresMorelos/.dotfiles ~/.dotfiles
 cd ~/.dotfiles
 ./install.sh
 ```
+
+If 1Password is already signed in on the machine, plain
+`git clone git@github.com:AndresMorelos/.dotfiles ~/.dotfiles` works too.
 
 On a brand-new Mac that is all you need. `install.sh` installs the Xcode Command Line
 Tools, Homebrew, every package, **and your password manager's app and CLI** — you never
@@ -54,17 +63,39 @@ waits. If you skip it, the rest of the setup still completes and it tells you to
 | `./install.sh --link` | Relink dotfiles only. Fast, no network, no vault |
 | `./install.sh --update` | Pull, relink, re-sync overlay, update all packages |
 | `./install.sh --sync-overlay` | Re-fetch this machine's config from its vault |
+| `./install.sh --adopt` | Inspect a hand-configured Mac and adopt what it already has |
 | `./install.sh --doctor` | Profile, links, packages, and a repo neutrality scan |
 | `./install.sh --show-signing-key` | Print the signing key and where to register it |
 | `./install.sh --purge-overlay` | Erase all machine-local config. For handing a laptop back |
 | `./install.sh --dump` | Snapshot current Homebrew state to `Brewfile.new` |
 
-Package groups: `dev`, `homeservices`, `productivity`, `security`, `macos`, `streaming`.
+Package groups: `dev`, `productivity`, `macos`, `streaming`.
 
 ```sh
 ./install.sh --packages dev,macos        # only these
 ./install.sh --skip-packages streaming   # everything except these
 ```
+
+## Adopting a machine that already exists
+
+On a Mac you configured by hand years ago, run this before anything else:
+
+```sh
+./install.sh --adopt
+```
+
+It reads the machine instead of interrogating you:
+
+- the git identity currently in effect (falling back to `~/.dotfiles-backup/` if a
+  previous run displaced it), and offers to align `profiles/personal/gitconfig` with it
+- which password manager is actually installed, and which accounts are signed in
+- **your existing signing key** — it reads every SSH-key item in the vault and matches
+  one against the key git already signs with, so you never end up with a second key to
+  register on every forge
+- packages installed here that no Brewfile declares, which is what would silently go
+  missing on your next Mac
+
+Nothing is changed without asking.
 
 ## Setting up a client machine
 

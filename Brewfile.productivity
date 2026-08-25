@@ -1,7 +1,3 @@
 cask "numi"
 cask "raycast"
 cask "rectangle"
-
-# Browserino needs its own tap and ships unsigned.
-tap "AlexStrNik/Browserino"
-cask "browserino", args: { "no-quarantine": true }

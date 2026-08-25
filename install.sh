@@ -19,8 +19,10 @@ source "$DOTFILES_DIR/lib/profile.sh"
 source "$DOTFILES_DIR/lib/links.sh"
 # shellcheck source=lib/overlay.sh
 source "$DOTFILES_DIR/lib/overlay.sh"
+# shellcheck source=lib/adopt.sh
+source "$DOTFILES_DIR/lib/adopt.sh"
 
-ALL_GROUPS=(dev homeservices productivity security macos streaming)
+ALL_GROUPS=(dev productivity macos streaming)
 
 ACTION="bootstrap"
 declare -a SELECTED_GROUPS=()
@@ -36,6 +38,8 @@ Commands (default: full bootstrap):
   --sync-overlay            Re-fetch this machine's overlay from its vault.
   --purge-overlay           Remove all machine-local config. For handing a laptop back.
   --show-signing-key        Print the active signing key and where to register it.
+  --adopt                   Inspect a machine that was set up by hand and adopt
+                            its existing identity, keys and packages.
   --doctor                  Report profile, links, packages, and neutrality.
   --dump                    Write current Homebrew state to Brewfile.new.
   --help, -h                Show this message.
@@ -56,9 +60,7 @@ Package options:
 
 Package groups:
   dev           cursor, iterm2, cleanshot, slack, tableplus, orbstack, ...
-  homeservices  vnc-viewer
-  productivity  numi, raycast, rectangle, browserino
-  security      knockknock, oversight
+  productivity  numi, raycast, rectangle
   macos         monitorcontrol, istat-menus
   streaming     spotify
 
@@ -91,6 +93,7 @@ parse_args() {
             --show-signing-key) ACTION="showkey" ;;
             --doctor) ACTION="doctor" ;;
             --dump) ACTION="dump" ;;
+            --adopt) ACTION="adopt" ;;
             --profile)
                 DOTFILES_PROFILE="${2:?--profile needs a value}"
                 shift
@@ -537,6 +540,7 @@ main() {
         showkey) cmd_show_key ;;
         doctor) cmd_doctor ;;
         dump) cmd_dump ;;
+        adopt) cmd_adopt ;;
     esac
 }
 
