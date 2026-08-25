@@ -70,7 +70,8 @@ waits. If you skip it, the rest of the setup still completes and it tells you to
 | `./install.sh --purge-overlay` | Erase all machine-local config. For handing a laptop back |
 | `./install.sh --dump` | Snapshot current Homebrew state to `Brewfile.new` |
 
-Package groups: `dev`, `productivity`, `macos`, `streaming`.
+Package groups: `dev`, `productivity`, `macos`, `streaming`, `fonts`.
+The base `Brewfile` always applies; groups are optional on top of it.
 
 ```sh
 ./install.sh --packages dev,macos        # only these

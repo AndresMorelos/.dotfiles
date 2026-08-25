@@ -22,7 +22,7 @@ source "$DOTFILES_DIR/lib/overlay.sh"
 # shellcheck source=lib/adopt.sh
 source "$DOTFILES_DIR/lib/adopt.sh"
 
-ALL_GROUPS=(dev productivity macos streaming)
+ALL_GROUPS=(dev productivity macos streaming fonts)
 
 ACTION="bootstrap"
 declare -a SELECTED_GROUPS=()
@@ -69,6 +69,9 @@ Package groups:
   productivity  numi, raycast, rectangle
   macos         monitorcontrol, istat-menus
   streaming     spotify
+  fonts         font-fira-code-nerd-font
+
+The base Brewfile is always applied; groups are optional on top of it.
 
 Examples:
   ./install.sh
@@ -229,7 +232,7 @@ _in_list() {
 
 # Every Brewfile that applies to this machine, in application order.
 active_brewfiles() {
-    local -a files=("$DOTFILES_DIR/Brewfile" "$DOTFILES_DIR/Brewfile.fonts")
+    local -a files=("$DOTFILES_DIR/Brewfile")
     local g
 
     while IFS= read -r g; do
