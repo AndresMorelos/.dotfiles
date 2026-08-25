@@ -285,9 +285,19 @@ install_oh_my_zsh_plugins() {
 
 # -------------------------------------------------------------------- commands
 
+# strict=0 for commands that only touch the filesystem: linking needs no vault,
+# so it must not demand provider credentials to run.
 require_profile() {
+    local strict="${1:-1}"
     profile_load || profile_prompt
-    profile_validate
+    if [[ "$strict" == "1" ]]; then
+        profile_validate
+    else
+        case "$DOTFILES_PROFILE" in
+            personal | work) ;;
+            *) die "profile must be 'personal' or 'work' (got: '${DOTFILES_PROFILE:-empty}')" ;;
+        esac
+    fi
 }
 
 cmd_bootstrap() {
@@ -314,7 +324,7 @@ cmd_bootstrap() {
 }
 
 cmd_link() {
-    require_profile
+    require_profile 0
     links_apply
 }
 
