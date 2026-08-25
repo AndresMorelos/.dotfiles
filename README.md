@@ -147,9 +147,16 @@ The result:
 |---|---|---|
 | Anywhere on a personal Mac | Personal | On, with the key from your vault |
 | Inside `<workdir>` on a client Mac | That client's | On, with the key from their vault |
-| Outside `<workdir>` on a client Mac | Personal | **Off** — that key is not reachable here |
+| Anywhere else on a client Mac | That client's | On |
 
 No manual switching, and no way to accidentally commit with the wrong address.
+
+A client machine holds nothing personal — its own 1Password account, its own SSH key,
+its own forge user — so the job identity is the default across the whole machine. A
+personal default there would protect nothing and could only produce commits with the
+wrong address or no signature. The `includeIf` on the work directory stays as an
+explicit reinforcement, and is what would scope things correctly if one machine ever
+had to serve two clients.
 
 If the vault has not been reached yet on a client machine, git is left with **no identity
 at all** (`user.useConfigOnly = true`), so commits fail loudly rather than silently going

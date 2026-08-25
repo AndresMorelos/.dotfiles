@@ -421,17 +421,24 @@ overlay_sync_work() {
     } | _write_generated "$DOTFILES_LOCAL/gitconfig"
     chmod 600 "$DOTFILES_LOCAL/gitconfig"
 
-    # Signing is off by default on a client machine: the personal key lives in a
-    # vault this machine cannot reach, so a global gpgsign would only ever fail.
+    # Nothing personal lives on a client machine, so a personal default there
+    # protects nothing - it only produces commits with the wrong address or no
+    # signature at all. The job identity is the default everywhere, and the
+    # includeIf stays as an explicit reinforcement for the work directory.
+    {
+        echo "$GEN_HEADER"
+        echo "# Work machine: the personal identity is deliberately NOT included."
+    } >"$HOME/.gitconfig.base.local"
+
     {
         echo
-        echo "[commit]"
-        echo "    gpgsign = false"
+        echo "[include]"
+        echo "    path = $DOTFILES_LOCAL/gitconfig"
         echo
         echo "[includeIf \"gitdir:$workdir\"]"
         echo "    path = $DOTFILES_LOCAL/gitconfig"
     } | _write_generated "$HOME/.gitconfig.local"
-    ok "~/.gitconfig.local -> work identity under ${workdir/#$HOME/~}"
+    ok "~/.gitconfig.local -> work identity is the default on this machine"
 
     [[ -n "$zsh_frag" ]] && {
         printf '%s\n' "$zsh_frag" | _write_generated "$DOTFILES_LOCAL/zsh.zsh"

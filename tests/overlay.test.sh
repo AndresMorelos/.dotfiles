@@ -88,9 +88,10 @@ work_sign="$(git -C "$HOME/Dev/acme/probe" config commit.gpgsign)"
 [[ "$work_sign" == "true" ]] && pass "inside workdir -> signing ON" || fail "signing is '$work_sign'"
 
 pers_sign="$(git -C "$HOME/Dev/personal-thing" config commit.gpgsign)"
-[[ "$pers_sign" == "false" ]] &&
-    pass "outside workdir -> signing OFF (key is unreachable here)" ||
-    fail "outside workdir signing is '$pers_sign'"
+pers_email="$(git -C "$HOME/Dev/personal-thing" config user.email)"
+[[ "$pers_sign" == "true" && "$pers_email" == "dev@acme.example" ]] &&
+    pass "outside workdir -> work identity too, still signing" ||
+    fail "outside workdir got email='$pers_email' sign='$pers_sign'"
 
 key="$(git -C "$HOME/Dev/acme/probe" config user.signingkey)"
 [[ "$key" == "$MOCK_PUB" ]] && pass "signingkey resolved from the vault" || fail "signingkey is '$key'"
