@@ -233,13 +233,25 @@ machine that serves a client, seeing **which git identity is active in this
 directory** — before writing the commit — is worth more than any other status.
 
 ```
-Opus 5 · api-gateway · main* · acme:dev@acme.example · $1.87
+Opus 5 · api-gateway · main* · acme:dev@acme.example · ctx 63% · 5h 87% (1h) · $1.87
 ```
 
 The address is resolved from inside the current directory, so `includeIf` rules are
 honoured: it is the address the next commit will actually carry, not a global default.
 Work identities render in a different colour from personal ones, an unsigned repo says
 so, and a repo with no identity at all says that loudest — because there, commits fail.
+
+It also reports plan usage, read from the session payload
+(`.context_window.used_percentage`, `.rate_limits.five_hour`, `.rate_limits.seven_day`):
+
+| Segment | Appears |
+|---|---|
+| `ctx NN%` | only past 50% — below that, how full the context is tells you nothing |
+| `5h NN%` / `7d NN%` | always, when the payload carries them |
+| `(1h)` after a percentage | only past 80%, when knowing the reset changes what you do next |
+
+All three go grey → amber → red as they climb, so the line escalates on its own instead
+of asking you to read numbers.
 
 Wire it up in `~/.claude/settings.json`:
 
