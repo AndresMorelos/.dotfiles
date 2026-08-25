@@ -28,20 +28,21 @@ both supported, including two separate 1Password accounts on the same machine.
 
 ## Install
 
-This repository is **private, and should stay that way** — its vault names map out
-where your secrets live. A new Mac has no SSH key yet, so clone over GitHub's device
-flow instead of making it public:
-
 ```sh
-brew install gh
-gh auth login                                     # opens a browser, no SSH needed
-gh repo clone AndresMorelos/.dotfiles ~/.dotfiles
+git clone https://github.com/AndresMorelos/.dotfiles ~/.dotfiles
 cd ~/.dotfiles
 ./install.sh
 ```
 
-If 1Password is already signed in on the machine, plain
-`git clone git@github.com:AndresMorelos/.dotfiles ~/.dotfiles` works too.
+This repository is public **on purpose**. It has to be cloneable from a client
+machine that holds none of your personal credentials, and it can be, because the
+isolation never depended on the repo being private — it depends on client
+configuration never entering the repo in the first place.
+
+What is public here is the *shape* of the setup: package lists, shell config, and the
+names of a few personal 1Password vaults. A vault name grants nothing without the
+account, secret key and master password. What is never here: any work email, any client
+name, any key, any token.
 
 On a brand-new Mac that is all you need. `install.sh` installs the Xcode Command Line
 Tools, Homebrew, every package, **and your password manager's app and CLI** — you never
@@ -207,7 +208,8 @@ environment variable ([Bitwarden docs](https://bitwarden.com/help/ssh-agent/)).
 
 ## Keeping the repo neutral
 
-Four layers, so it does not depend on remembering:
+The repository is public, so a slip is a public slip. Four layers, so it does not
+depend on remembering:
 
 1. `.gitignore` covers `*.local`, `.dotfiles-local/`, `.DS_Store`, `Brewfile.new`.
 2. A **pre-commit hook** (installed by `--link`) rejects any staged content containing

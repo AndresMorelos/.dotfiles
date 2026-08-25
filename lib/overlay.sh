@@ -230,8 +230,13 @@ overlay_write_agent_toml() {
     {
         echo "$GEN_HEADER"
         cat "$DOTFILES_DIR/1Password/ssh/agent.base.toml"
-        echo
-        cat "$DOTFILES_DIR/profiles/base/agent-keys.toml"
+        # A client machine has its own 1Password account with its own keys.
+        # Mounting the personal account's vaults there would be both useless
+        # and a leak of where personal secrets live.
+        if [[ "$DOTFILES_PROFILE" == "personal" ]]; then
+            echo
+            cat "$DOTFILES_DIR/profiles/base/agent-keys.toml"
+        fi
         if [[ -n "$keys_fragment" ]]; then
             echo
             printf '%s\n' "$keys_fragment"
