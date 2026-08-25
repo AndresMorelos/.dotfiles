@@ -48,26 +48,27 @@ EOF
 }
 
 provider_unlock() {
-    local status
-    status="$(bw status 2>/dev/null | jq -r '.status // "unauthenticated"')"
+    local vault_status
+    vault_status="$(bw status 2>/dev/null | jq -r '.status // "unauthenticated"')"
 
-    case "$status" in
-        unauthenticated)
-            die "Not logged in to Bitwarden. Run: bw login"
-            ;;
-        locked)
-            step "Unlocking Bitwarden vault..."
-            BW_SESSION="$(bw unlock --raw)" ||
-                die "Bitwarden unlock failed"
-            export BW_SESSION
-            _bw_we_unlocked=1
-            trap provider_lock EXIT
-            ;;
-        unlocked)
-            [[ -n "${BW_SESSION:-}" ]] ||
-                die "Bitwarden reports unlocked but BW_SESSION is unset. Run: export BW_SESSION=\$(bw unlock --raw)"
-            ;;
-    esac
+    if [[ "$vault_status" == "unauthenticated" ]]; then
+        die "Not logged in to Bitwarden. Run: bw login"
+    fi
+
+    # Reuse a session the caller already exported, but only if it still works.
+    if [[ -n "${BW_SESSION:-}" ]] &&
+        [[ "$(bw status --session "$BW_SESSION" 2>/dev/null | jq -r '.status // ""')" == "unlocked" ]]; then
+        :
+    else
+        # Never demand that the user export BW_SESSION by hand: a session this
+        # process cannot see is the same as no session, and we can just ask.
+        step "Unlocking Bitwarden vault..."
+        BW_SESSION="$(bw unlock --raw)" ||
+            die "Bitwarden unlock failed"
+        export BW_SESSION
+        _bw_we_unlocked=1
+        trap provider_lock EXIT
+    fi
 
     bw sync --session "$BW_SESSION" >/dev/null 2>&1 || true
 }
