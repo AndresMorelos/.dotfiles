@@ -21,6 +21,8 @@ source "$DOTFILES_DIR/lib/links.sh"
 source "$DOTFILES_DIR/lib/overlay.sh"
 # shellcheck source=lib/adopt.sh
 source "$DOTFILES_DIR/lib/adopt.sh"
+# shellcheck source=lib/claude.sh
+source "$DOTFILES_DIR/lib/claude.sh"
 
 ALL_GROUPS=(dev productivity macos streaming fonts)
 

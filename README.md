@@ -253,15 +253,31 @@ It also reports plan usage, read from the session payload
 All three go grey → amber → red as they climb, so the line escalates on its own instead
 of asking you to read numbers.
 
-Wire it up in `~/.claude/settings.json`:
+It is wired up automatically — see below.
 
-```json
-"statusLine": {
-  "type": "command",
-  "command": "~/.dotfiles/claude/statusline.sh",
-  "padding": 0
-}
-```
+## Claude Code settings
+
+Claude Code loads settings user → project → local, with **no user-level local
+override**, so symlinking `~/.claude/settings.json` would share every key, permission
+posture included. It is generated instead, the same two-layer shape as everything else:
+
+| File | Tracked | Holds |
+|---|---|---|
+| `claude/settings.base.json` | yes | model, output style, theme, deny rules, hooks, status line |
+| `~/.config/dotfiles/claude-settings.json` | no | whatever this machine alone should have |
+
+The local file wins on any key it defines, and `--link` regenerates the merge. The status
+line path is rewritten to this repo's absolute location at generation time, so it works
+under any username.
+
+**`permissions.defaultMode` belongs in the local file, not the base.** Running with
+`bypassPermissions` is a decision about one machine and one codebase; sharing it would
+silently apply your personal posture to a client's repository.
+
+Claude Code also writes to that file itself (`/config`, permission dialogs). Regeneration
+would discard those edits, so a checksum is recorded: if the file changed since it was
+last generated, `--link` names the drifted keys, keeps a copy in `~/.dotfiles-backup/`,
+and tells you which of the two files to move them into.
 
 ## Tests
 

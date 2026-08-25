@@ -59,6 +59,7 @@ links_apply() {
 
     links_write_git_base
     links_install_git_hooks
+    claude_settings_apply
 
     if [[ -n "$_backup_dir" ]]; then
         info "Replaced files were saved to ${_backup_dir/#$HOME/~}"

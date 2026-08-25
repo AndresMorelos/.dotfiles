@@ -1,0 +1,38 @@
+{
+  "model": "opus",
+  "outputStyle": "Gentleman",
+  "effortLevel": "medium",
+  "theme": "dark",
+  "tui": "fullscreen",
+  "agentPushNotifEnabled": true,
+  "permissions": {
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(sudo rm -rf /)",
+      "Bash(rm -rf ~)",
+      "Bash(sudo rm -rf ~)",
+      "Read(.env)",
+      "Read(.env.*)",
+      "Edit(.env)",
+      "Edit(.env.*)"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "gentle-ai skill-registry refresh --quiet --no-gitignore --cwd \"${CLAUDE_PROJECT_DIR:-$PWD}\" || true"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "PLACEHOLDER-rewritten-at-link-time",
+    "padding": 0
+  }
+}
