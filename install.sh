@@ -384,11 +384,12 @@ cmd_bootstrap() {
     require_profile
     install_brew
     install_brew_packages
+    # Before links_apply: the linked .zshrc expects oh-my-zsh to be there.
+    install_oh_my_zsh
+    install_oh_my_zsh_plugins
     links_apply
     local overlay_ok=1
     overlay_bootstrap || overlay_ok=0
-    install_oh_my_zsh
-    install_oh_my_zsh_plugins
     cleanup_brew
     echo
     if [[ $overlay_ok -eq 1 ]]; then
@@ -401,6 +402,7 @@ cmd_bootstrap() {
 
 cmd_link() {
     require_profile 0
+    [[ -d "$HOME/.oh-my-zsh" ]] || warn "oh-my-zsh is not installed; run ./install.sh to complete the setup"
     links_apply
 }
 

@@ -72,7 +72,13 @@ zstyle ':omz:update' mode auto      # update automatically without asking
 # Add wisely, as too many plugins slow down shell startup.
 plugins=(node qrcode fnm yarn zsh-npm-scripts-autocomplete)
 
-source $ZSH/oh-my-zsh.sh
+# Guarded: --link can run before oh-my-zsh is installed, and a dotfiles repo
+# must never hand you a broken shell.
+if [[ -f $ZSH/oh-my-zsh.sh ]]; then
+    source $ZSH/oh-my-zsh.sh
+else
+    print -u2 "dotfiles: oh-my-zsh not installed yet - run ~/.dotfiles/install.sh"
+fi
 
 # User configuration
 
@@ -117,3 +123,6 @@ source "$DOTFILES_DIR/zsh/aliases.zsh"
 [[ -f "$HOME/.zshrc.local" ]] && source "$HOME/.zshrc.local"
 
 # pyenv is initialized in .zprofile only — do not repeat it here.
+
+# Keep the final status clean: a false guard above must not leave $? at 1.
+true
