@@ -297,10 +297,20 @@ install_oh_my_zsh() {
         return 0
     fi
     step "Installing Oh My Zsh..."
-    RUNZSH=no KEEP_ZSHRC=yes sh -c \
+    # env -u ZSH: the installer reads $ZSH from the environment, and our own
+    # .zshrc exports it. Inheriting it makes the installer refuse to run.
+    # The installer also exits 0 when it refuses, so its status proves nothing -
+    # check for the file it is supposed to produce instead.
+    local log
+    log="$(env -u ZSH RUNZSH=no KEEP_ZSHRC=yes CHSH=no sh -c \
         "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" \
-        "" --unattended >/dev/null ||
-        die "Oh My Zsh installation failed"
+        "" --unattended 2>&1)" || true
+
+    if [[ ! -f "$HOME/.oh-my-zsh/oh-my-zsh.sh" ]]; then
+        err "Oh My Zsh did not install. Installer said:"
+        printf '%s\n' "$log" | tail -12 >&2
+        die "fix the above, then re-run ./install.sh"
+    fi
     ok "installed"
 }
 
