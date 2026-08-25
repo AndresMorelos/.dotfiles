@@ -243,14 +243,30 @@ active_brewfiles() {
     done
 }
 
+# Does an app with this cask's name already sit in /Applications without brew
+# knowing about it? Common on a machine that was set up by hand first.
+_app_installed_manually() {
+    local token="$1" artifact
+    brew list --cask --versions "$token" >/dev/null 2>&1 && return 1
+    while IFS= read -r artifact; do
+        [[ -n "$artifact" && -e "/Applications/$artifact" ]] && return 0
+    done < <(brew info --cask --json=v2 "$token" 2>/dev/null |
+        jq -r '.casks[0].artifacts[]? | .app[]? // empty' 2>/dev/null)
+    return 1
+}
+
 install_brew_packages() {
     info "Installing packages with brew bundle..."
     brew update >/dev/null 2>&1 || warn "brew update failed; continuing with the local index"
 
+    # --adopt lets brew take over an app that was installed by hand instead of
+    # refusing or clobbering it. Without this, any machine that predates these
+    # dotfiles fails to converge.
     local f
+    export HOMEBREW_CASK_OPTS="${HOMEBREW_CASK_OPTS:-} --adopt"
     while IFS= read -r f; do
         step "  ${f#"$DOTFILES_DIR"/}"
-        brew bundle install --file="$f" --no-lock >/dev/null ||
+        brew bundle install --file="$f" >/dev/null ||
             warn "some packages in ${f##*/} failed"
     done < <(active_brewfiles)
     ok "packages installed"
@@ -387,12 +403,35 @@ cmd_dump() {
 cmd_doctor() {
     profile_load || die "no machine profile found; run ./install.sh first"
 
+    local na="(none - personal profile)"
+    [[ "$DOTFILES_PROFILE" == "work" ]] && na="(unset)"
+
     info "Profile"
-    echo "   profile   ${DOTFILES_PROFILE:-?}"
-    echo "   slug      ${DOTFILES_SLUG:-(none)}"
-    echo "   provider  ${DOTFILES_PROVIDER:-?}"
-    echo "   vault     ${DOTFILES_VAULT:-(none)}"
-    echo "   overlay   ${DOTFILES_LOCAL:-(none)}"
+    echo "   profile     ${DOTFILES_PROFILE:-?}"
+    echo "   provider    ${DOTFILES_PROVIDER:-?}"
+    echo "   account     ${DOTFILES_ACCOUNT:-(n/a)}"
+    echo "   slug        ${DOTFILES_SLUG:-$na}"
+    echo "   vault       ${DOTFILES_VAULT:-$na}"
+    echo "   overlay     ${DOTFILES_LOCAL:-$na}"
+    echo
+
+    info "Signing"
+    if [[ -n "$DOTFILES_KEY_ITEM" ]]; then
+        echo "   key item    $DOTFILES_KEY_ITEM  [vault: ${DOTFILES_KEY_VAULT:-?}]"
+    else
+        warn "no signing key pinned yet - run ./install.sh --sync-overlay"
+    fi
+    local signers gsign
+    signers="$(git config gpg.ssh.allowedSignersFile || true)"
+    gsign="$(git config commit.gpgsign || echo false)"
+    echo "   gpgsign     $gsign"
+    if [[ "$gsign" == "true" && -n "$signers" && -f "$signers" ]]; then
+        ok "signatures verify (allowed_signers present)"
+    elif [[ "$gsign" == "true" ]]; then
+        err "signing is on but allowed_signers is missing - signatures will not verify"
+    else
+        warn "commits are unsigned - run ./install.sh --sync-overlay"
+    fi
     echo
 
     info "Symlinks"
@@ -416,16 +455,33 @@ cmd_doctor() {
     echo
 
     info "Packages"
-    local f missing=0
+    local f missing=0 detail
     while IFS= read -r f; do
         if brew bundle check --file="$f" >/dev/null 2>&1; then
             ok "${f#"$DOTFILES_DIR"/}"
         else
-            err "${f#"$DOTFILES_DIR"/} has missing entries"
+            err "${f#"$DOTFILES_DIR"/}"
+            # "needs to be installed or updated" covers both, so separate them:
+            # anything brew already knows about is merely outdated.
+            detail="$(brew bundle check --file="$f" --verbose 2>&1 |
+                rg -o '(Formula|Cask) \S+' || true)"
+            local kind name
+            while read -r kind name; do
+                [[ -z "${name:-}" ]] && continue
+                if [[ "$kind" == "Formula" ]] && brew list --formula --versions "$name" >/dev/null 2>&1; then
+                    echo "         $name (outdated)"
+                elif [[ "$kind" == "Cask" ]] && brew list --cask --versions "$name" >/dev/null 2>&1; then
+                    echo "         $name (outdated)"
+                elif [[ "$kind" == "Cask" ]] && _app_installed_manually "$name"; then
+                    echo "         $name (installed outside brew — will be adopted)"
+                else
+                    echo "         $name (missing)"
+                fi
+            done <<<"$detail"
             missing=1
         fi
     done < <(active_brewfiles)
-    [[ $missing -eq 1 ]] && echo "   run ./install.sh to install what is missing"
+    [[ $missing -eq 1 ]] && echo "   run ./install.sh to converge"
     echo
 
     info "Neutrality"

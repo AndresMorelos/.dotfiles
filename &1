@@ -1,0 +1,9 @@
+brew bundle can't satisfy your Brewfile's dependencies.
+→ Formula ripgrep needs to be installed or updated.
+→ Formula eza needs to be installed or updated.
+→ Formula jq needs to be installed or updated.
+→ Formula ack needs to be installed or updated.
+→ Formula starship needs to be installed or updated.
+→ Formula pyenv needs to be installed or updated.
+→ Formula git needs to be installed or updated.
+Satisfy missing dependencies with `brew bundle install`.
