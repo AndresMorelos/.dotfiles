@@ -226,6 +226,31 @@ depend on remembering:
 4. Nothing job-specific is ever written into the repo in the first place — the installer
    only writes to `$HOME`.
 
+## Claude Code status line
+
+`claude/statusline.sh` renders the session line. It exists for one reason: on a
+machine that serves a client, seeing **which git identity is active in this
+directory** — before writing the commit — is worth more than any other status.
+
+```
+Opus 5 · api-gateway · main* · acme:dev@acme.example · $1.87
+```
+
+The address is resolved from inside the current directory, so `includeIf` rules are
+honoured: it is the address the next commit will actually carry, not a global default.
+Work identities render in a different colour from personal ones, an unsigned repo says
+so, and a repo with no identity at all says that loudest — because there, commits fail.
+
+Wire it up in `~/.claude/settings.json`:
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "~/.dotfiles/claude/statusline.sh",
+  "padding": 0
+}
+```
+
 ## Tests
 
 ```sh
