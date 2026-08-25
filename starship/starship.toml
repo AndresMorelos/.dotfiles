@@ -1,18 +1,68 @@
 # Shared prompt configuration. Lives in the repo so every machine looks the same.
+# Requires a Nerd Font in the terminal profile (see Brewfile.fonts).
+
 add_newline = true
 
+format = """
+$directory\
+$git_branch\
+$git_status\
+$nodejs\
+$python\
+$golang\
+$rust\
+$cmd_duration\
+$line_break\
+$character"""
+
+[directory]
+style = "bold cyan"
+truncation_length = 3
+truncate_to_repo = true
+read_only = " "
+read_only_style = "red"
+
 [character]
-success_symbol = "[>](bold green)"
-error_symbol = "[>](bold red)"
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+vimcmd_symbol = "[❮](bold yellow)"
 
 [git_branch]
 symbol = " "
+style = "bold purple"
+format = "on [$symbol$branch]($style) "
+
+[git_status]
+style = "bold yellow"
+format = "([$all_status$ahead_behind]($style) )"
+conflicted = "= "
+ahead = "⇡${count} "
+behind = "⇣${count} "
+diverged = "⇕⇡${ahead_count}⇣${behind_count} "
+untracked = "? "
+stashed = "$ "
+modified = "! "
+staged = "+ "
+renamed = "» "
+deleted = "✘ "
 
 [nodejs]
+symbol = " "
 format = "via [$symbol($version )]($style)"
 
 [python]
+symbol = " "
+format = "via [$symbol($version )]($style)"
+
+[golang]
+symbol = " "
+format = "via [$symbol($version )]($style)"
+
+[rust]
+symbol = " "
 format = "via [$symbol($version )]($style)"
 
 [cmd_duration]
 min_time = 2000
+style = "bold yellow"
+format = "took [$duration]($style) "
