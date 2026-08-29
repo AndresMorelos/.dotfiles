@@ -1,0 +1,33 @@
+# Infrastructure tooling. Not in the base Brewfile on purpose: a client machine
+# has no reason to carry a Kubernetes toolchain, and the base is what every
+# machine gets unconditionally.
+
+# Containers. What the homelab runs today: eight Compose stacks behind a Makefile.
+brew "lazydocker"    # TUI over Compose - logs, restarts and state in one screen
+brew "dive"          # inspect an image layer by layer when it balloons
+brew "hadolint"      # lint Dockerfiles the way shellcheck lints scripts
+
+# YAML. jq for YAML, and the reason it is here rather than in the base: eight
+# compose.yaml files, soon to be manifests.
+brew "yq"
+
+# Kubernetes. kubectl is already on this machine but was declared nowhere, so
+# --prune-packages would have uninstalled it.
+brew "kubernetes-cli"  # kubectl
+brew "k9s"             # the TUI. On a homelab it replaces most kubectl typing
+brew "kubectx"         # kubectx + kubens; switching context by hand invites
+                       # running the right command against the wrong cluster
+brew "stern"           # tail logs across pods, not one at a time
+brew "helm"
+brew "kustomize"       # overlays without templating; helm's alternative, not rival
+
+# A cluster on this laptop, so a manifest is tested before it reaches the server.
+brew "k3d"             # k3s in Docker - the same distribution a homelab runs
+
+# Manifests are just YAML until something checks them.
+brew "kubeconform"     # validate against the Kubernetes schemas before applying
+
+# Secrets in a git repo. The homelab is already git-driven; this keeps it that
+# way once manifests carry credentials.
+brew "sops"
+brew "age"             # sops backend that needs no cloud KMS

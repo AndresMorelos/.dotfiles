@@ -26,9 +26,11 @@ source "$DOTFILES_DIR/lib/claude.sh"
 # shellcheck source=lib/iterm.sh
 source "$DOTFILES_DIR/lib/iterm.sh"
 
-ALL_GROUPS=(dev productivity macos streaming fonts)
+ALL_GROUPS=(dev infra productivity macos streaming fonts)
 
 ACTION="bootstrap"
+PRUNE_CONFIRMED=0
+PRUNE_TMP=""
 declare -a SELECTED_GROUPS=()
 declare -a SKIP_GROUPS=()
 
@@ -52,6 +54,8 @@ Commands (default: full bootstrap):
                             its existing identity, keys and packages.
   --doctor                  Report profile, links, packages, and neutrality.
   --dump                    Write current Homebrew state to Brewfile.new.
+  --prune-packages          Uninstall packages no Brewfile declares any more.
+                            Lists them and stops; add --yes to actually remove.
   --help, -h                Show this message.
 
 Profile options (persisted to ~/.config/dotfiles/config, never committed):
@@ -67,13 +71,15 @@ Profile options (persisted to ~/.config/dotfiles/config, never committed):
 Package options:
   --packages GROUPS         Comma-separated groups to install
   --skip-packages GROUPS    Comma-separated groups to skip
+  --yes, -y                 Confirm --prune-packages. Without it, it is a dry run.
+
+Group flags do NOT narrow --prune-packages: it always reads every Brewfile that
+could apply to this machine, so skipping a group never uninstalls it.
 
 Package groups:
-  dev           cursor, iterm2, cleanshot, slack, tableplus, orbstack, ...
-  productivity  numi, raycast, rectangle
-  macos         monitorcontrol, istat-menus
-  streaming     spotify
-  fonts         font-fira-code-nerd-font
+$(for g in "${ALL_GROUPS[@]}"; do printf '  %-14s%s\n' "$g" "$(group_description "$g")"; done)
+
+Asked once on a first run and remembered in ~/.config/dotfiles/config.
 
 The base Brewfile is always applied; groups are optional on top of it.
 
@@ -107,6 +113,8 @@ parse_args() {
             --doctor) ACTION="doctor" ;;
             --dump) ACTION="dump" ;;
             --adopt) ACTION="adopt" ;;
+            --prune-packages) ACTION="prune" ;;
+            --yes | -y) PRUNE_CONFIRMED=1 ;;
             --profile)
                 CLI_PROFILE="${2:?--profile needs a value}"
                 shift
@@ -207,18 +215,99 @@ install_brew() {
 
 # ------------------------------------------------------------------- packages
 
+# One description per group, so the help text, the prompt and --doctor cannot
+# drift apart. They already had: the help text still advertised Cursor long
+# after the Brewfile stopped installing it.
+group_description() {
+    case "$1" in
+        dev) echo "editor, terminal, DB client, containers" ;;
+        infra) echo "docker and kubernetes tooling" ;;
+        productivity) echo "numi, raycast, rectangle" ;;
+        macos) echo "monitorcontrol, istat-menus" ;;
+        streaming) echo "spotify" ;;
+        fonts) echo "nerd fonts" ;;
+        *) echo "" ;;
+    esac
+}
+
+# Ask once, on a first run, and remember the answer next to every other
+# machine-local decision. Asking again on each --update would be noise, and
+# defaulting silently to everything installs a Kubernetes toolchain on a laptop
+# that only ever needed a terminal.
+groups_prompt() {
+    # No terminal means no answer. A piped or CI run keeps the old behaviour -
+    # everything - rather than blocking forever on a read nobody can see.
+    [[ -t 0 ]] || return 0
+
+    local g desc
+    echo
+    info "Which package groups should this machine install?"
+    for g in "${ALL_GROUPS[@]}"; do
+        desc="$(group_description "$g")"
+        printf '   %-14s %s
+' "$g" "$desc"
+    done
+    echo
+    echo "   The base Brewfile is always installed on top of whatever you pick."
+    printf 'Groups, comma-separated [all]: '
+
+    local reply
+    read -r reply
+    reply="${reply// /}"
+
+    if [[ -z "$reply" || "$reply" == "all" ]]; then
+        DOTFILES_GROUPS="$(
+            IFS=,
+            echo "${ALL_GROUPS[*]}"
+        )"
+    elif [[ "$reply" == "none" ]]; then
+        # Recorded as a real answer, not an empty one, or the next run would
+        # read "no groups chosen" as "never asked" and ask again.
+        DOTFILES_GROUPS="none"
+    else
+        local -a picked=()
+        while IFS= read -r g; do
+            [[ -z "$g" ]] && continue
+            _is_group "$g" || die "unknown package group: '$g' (known: ${ALL_GROUPS[*]})"
+            picked+=("$g")
+        done < <(tr ',' '\n' <<<"$reply")
+        DOTFILES_GROUPS="$(
+            IFS=,
+            echo "${picked[*]}"
+        )"
+    fi
+
+    profile_save >/dev/null
+    ok "Package groups: $DOTFILES_GROUPS"
+    echo
+}
+
+# Precedence: what the command line said, then what this machine answered once,
+# then everything. A flag wins over the stored answer for the same reason it
+# wins over the stored profile - a saved mistake has to stay correctable.
 resolve_groups() {
     local -a resolved=()
+    local -a candidates=()
     local g
 
     if [[ ${#SELECTED_GROUPS[@]} -gt 0 ]]; then
-        resolved=("${SELECTED_GROUPS[@]}")
+        candidates=("${SELECTED_GROUPS[@]}")
+    elif [[ "$DOTFILES_GROUPS" == "none" ]]; then
+        return 0
+    elif [[ -n "$DOTFILES_GROUPS" ]]; then
+        while IFS= read -r g; do
+            [[ -n "$g" ]] && candidates+=("$g")
+        done < <(tr ',' '\n' <<<"$DOTFILES_GROUPS")
     else
-        for g in "${ALL_GROUPS[@]}"; do
-            _in_list "$g" "${SKIP_GROUPS[@]:-}" && continue
-            resolved+=("$g")
-        done
+        candidates=("${ALL_GROUPS[@]}")
     fi
+
+    # --skip-packages applies to whatever the list turned out to be, so it can
+    # trim a stored answer for one run without rewriting it.
+    for g in "${candidates[@]}"; do
+        _in_list "$g" "${SKIP_GROUPS[@]:-}" && continue
+        resolved+=("$g")
+    done
     printf '%s\n' "${resolved[@]:-}"
 }
 
@@ -272,6 +361,20 @@ _app_installed_manually() {
 }
 
 install_brew_packages() {
+    # A first run has no stored answer yet. Ask before spending ten minutes
+    # installing groups nobody asked for.
+    if [[ ${#SELECTED_GROUPS[@]} -eq 0 && -z "$DOTFILES_GROUPS" ]]; then
+        groups_prompt
+    elif [[ ${#SELECTED_GROUPS[@]} -gt 0 ]]; then
+        # An explicit --packages is an answer too; remember it like the profile
+        # flags are remembered, so --update keeps honouring it.
+        DOTFILES_GROUPS="$(
+            IFS=,
+            echo "${SELECTED_GROUPS[*]}"
+        )"
+        profile_save >/dev/null
+    fi
+
     info "Installing packages with brew bundle..."
     brew update >/dev/null 2>&1 || warn "brew update failed; continuing with the local index"
 
@@ -293,6 +396,90 @@ cleanup_brew() {
     brew cleanup >/dev/null 2>&1 || true
     brew autoremove >/dev/null 2>&1 || true
     ok "done"
+}
+
+# Every Brewfile that COULD apply to this machine - not the subset selected for
+# this run. `brew bundle cleanup` uninstalls whatever a Brewfile does not name,
+# so feeding it active_brewfiles() would read "--packages dev" as "the user no
+# longer wants fonts" and uninstall four groups nobody touched.
+#
+# Group flags are ignored here for the same reason, and BOTH providers are
+# included: switching a machine to Bitwarden is not a request to uninstall the
+# 1Password CLI it may still need to unlock a vault.
+prunable_brewfiles() {
+    local -a files=("$DOTFILES_DIR/Brewfile")
+    local g
+
+    for g in "${ALL_GROUPS[@]}"; do
+        files+=("$DOTFILES_DIR/Brewfile.$g")
+    done
+
+    files+=("$DOTFILES_DIR/Brewfile.provider.onepassword")
+    files+=("$DOTFILES_DIR/Brewfile.provider.bitwarden")
+
+    [[ "$DOTFILES_PROFILE" == "personal" ]] &&
+        files+=("$DOTFILES_DIR/profiles/personal/Brewfile")
+
+    [[ -n "$DOTFILES_LOCAL" && -f "$DOTFILES_LOCAL/Brewfile" ]] &&
+        files+=("$DOTFILES_LOCAL/Brewfile")
+
+    local f
+    for f in "${files[@]}"; do
+        [[ -f "$f" ]] && printf '%s\n' "$f"
+    done
+}
+
+# A client's packages live in its overlay, which is unreadable until the vault
+# is unlocked. Pruning without it would uninstall the client's entire toolchain
+# and report success, so refuse instead of guessing.
+prune_guard() {
+    [[ "$DOTFILES_PROFILE" == "work" ]] || return 0
+    [[ -n "$DOTFILES_LOCAL" && -d "$DOTFILES_LOCAL" ]] && return 0
+    die "this machine's overlay is not synced; run ./install.sh --sync-overlay first
+   Pruning now would uninstall every package this client's overlay declares."
+}
+
+cmd_prune() {
+    profile_load || die "no machine profile found; run ./install.sh first"
+    prune_guard
+
+    # Not a local: the trap below runs after this function's locals are gone.
+    PRUNE_TMP="$(mktemp -t dotfiles-prune)" || die "could not create a temporary Brewfile"
+    trap 'rm -f "${PRUNE_TMP:-}"' EXIT
+    local combined="$PRUNE_TMP"
+
+    local f
+    info "Reading every Brewfile that applies to a $DOTFILES_PROFILE machine..."
+    while IFS= read -r f; do
+        step "  ${f#"$DOTFILES_DIR"/}"
+        cat "$f" >>"$combined"
+        printf '\n' >>"$combined"
+    done < <(prunable_brewfiles)
+    echo
+
+    # Formulae and casks only. Taps, Mac App Store apps and editor extensions
+    # are not fully declared in this repo, so cleaning them would remove things
+    # no Brewfile ever promised to track.
+    if [[ $PRUNE_CONFIRMED -eq 1 ]]; then
+        warn "Uninstalling everything no Brewfile declares..."
+        brew bundle cleanup --file="$combined" --formula --cask --force ||
+            die "cleanup failed; nothing else was changed"
+        ok "Packages now match the Brewfiles."
+    else
+        info "Dry run - nothing will be uninstalled."
+        # Stop at the cache section: `brew cleanup` reclaiming download caches is
+        # not a package removal, and hundreds of lines of it hide the few names
+        # that actually matter.
+        HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 \
+            brew bundle cleanup --file="$combined" --formula --cask </dev/null 2>&1 |
+            sed -n '/^Would uninstall/,$p' |
+            sed -n '/^Would .brew cleanup/q; p' || true
+        echo
+        warn "This lists EVERY formula and cask brew knows about that no Brewfile names,"
+        echo "         including anything installed by hand for a one-off task."
+        echo "         Add what you want to keep to a Brewfile, then run:"
+        echo "           ./install.sh --prune-packages --yes"
+    fi
 }
 
 # ----------------------------------------------------------------------- zsh
@@ -681,6 +868,7 @@ main() {
         doctor) cmd_doctor ;;
         dump) cmd_dump ;;
         adopt) cmd_adopt ;;
+        prune) cmd_prune ;;
     esac
 }
 

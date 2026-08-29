@@ -10,6 +10,7 @@
 #   slug=acme
 #   provider=bitwarden
 #   item=dotfiles-overlay
+#   groups=dev,infra
 
 # shellcheck disable=SC2034  # consumed by install.sh and lib/overlay.sh
 DOTFILES_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles"
@@ -23,6 +24,7 @@ DOTFILES_VAULT=""
 DOTFILES_ITEM=""
 DOTFILES_KEY_ITEM=""
 DOTFILES_KEY_VAULT=""
+DOTFILES_GROUPS=""
 DOTFILES_LOCAL=""
 
 # Read the config file into the DOTFILES_* variables. Returns 1 if absent.
@@ -44,6 +46,7 @@ profile_load() {
             item) DOTFILES_ITEM="$value" ;;
             key_item) DOTFILES_KEY_ITEM="$value" ;;
             key_vault) DOTFILES_KEY_VAULT="$value" ;;
+            groups) DOTFILES_GROUPS="$value" ;;
             *) ;; # unknown key: ignore rather than fail
         esac
     done <"$DOTFILES_CONFIG_FILE"
@@ -74,6 +77,7 @@ profile_save() {
         [[ -n "$DOTFILES_ITEM" ]] && echo "item=$DOTFILES_ITEM"
         [[ -n "$DOTFILES_KEY_ITEM" ]] && echo "key_item=$DOTFILES_KEY_ITEM"
         [[ -n "$DOTFILES_KEY_VAULT" ]] && echo "key_vault=$DOTFILES_KEY_VAULT"
+        [[ -n "$DOTFILES_GROUPS" ]] && echo "groups=$DOTFILES_GROUPS"
     } >"$DOTFILES_CONFIG_FILE"
     chmod 600 "$DOTFILES_CONFIG_FILE"
     profile_derive

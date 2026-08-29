@@ -64,6 +64,7 @@ links_apply() {
     links_write_git_base
     links_install_git_hooks
     claude_settings_apply
+    claude_mcp_apply
     iterm_defaults_apply
 
     if [[ -n "$_backup_dir" ]]; then

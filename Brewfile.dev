@@ -1,4 +1,10 @@
-cask "cursor"
+# Media and document tooling. In the dev group rather than the base Brewfile
+# because between them they pull in some forty dependencies, and the base is
+# what every machine gets whether it codes or not.
+brew "ffmpeg"
+brew "poppler"   # pdftotext, pdfimages
+
+cask "visual-studio-code"
 cask "iterm2"
 cask "cleanshot"
 cask "pixelsnap"

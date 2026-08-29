@@ -69,14 +69,57 @@ waits. If you skip it, the rest of the setup still completes and it tells you to
 | `./install.sh --show-signing-key` | Print the signing key and where to register it |
 | `./install.sh --purge-overlay` | Erase all machine-local config. For handing a laptop back |
 | `./install.sh --dump` | Snapshot current Homebrew state to `Brewfile.new` |
+| `./install.sh --prune-packages` | List packages no Brewfile declares any more. `--yes` uninstalls them |
 
-Package groups: `dev`, `productivity`, `macos`, `streaming`, `fonts`.
+Package groups: `dev`, `infra`, `productivity`, `macos`, `streaming`, `fonts`.
 The base `Brewfile` always applies; groups are optional on top of it.
 
+A first run **asks** which groups this machine wants, and stores the answer in
+`~/.config/dotfiles/config` next to every other machine-local decision. `--update`
+honours it instead of asking again, because a question you answer on every update is
+noise — and because silently defaulting to everything installs a Kubernetes toolchain
+on a laptop that only ever needed a terminal.
+
+There is nobody to ask when there is no terminal, so a piped or CI run skips the
+question and installs every group, exactly as it did before.
+
 ```sh
-./install.sh --packages dev,macos        # only these
-./install.sh --skip-packages streaming   # everything except these
+./install.sh --packages dev,macos        # only these, and remember it
+./install.sh --skip-packages streaming   # trim this one run, keep the stored answer
 ```
+
+`--packages` is remembered the same way the profile flags are, so a stored answer stays
+correctable from the command line. `--skip-packages` deliberately is not: it trims
+whatever the list turned out to be, for one run, without rewriting what you chose.
+
+Answering `none` is a real answer and is stored as one — otherwise the next run would
+read an empty value as *"never asked"* and ask again.
+
+### Removing a package
+
+Delete the line from its Brewfile, then:
+
+```sh
+./install.sh --prune-packages           # lists what would go. Uninstalls nothing
+./install.sh --prune-packages --yes     # actually uninstalls
+```
+
+`brew bundle cleanup` uninstalls whatever a Brewfile does not name, so the file it is
+given decides what survives. This one is built from **every Brewfile that could apply to
+this machine**, never the subset installed this run — `--packages` and `--skip-packages`
+are deliberately ignored, or `--packages dev` would read as *"fonts, macos, productivity
+and streaming are no longer wanted"* and take four groups with it. Both provider
+Brewfiles are included for the same reason: moving a machine to Bitwarden is not a
+request to uninstall the 1Password CLI.
+
+On a work machine the client's packages live in the overlay, which is unreadable until
+the vault is unlocked, so pruning before `--sync-overlay` **refuses** rather than
+uninstalling that client's entire toolchain.
+
+The dry run lists every formula and cask on the machine that no Brewfile names — which
+includes anything installed by hand. Read it before passing `--yes`, and add whatever
+you want to keep to the right Brewfile first. It is not wired into `--update` on
+purpose: uninstalling by default is not a thing an update should do.
 
 ## Adopting a machine that already exists
 
@@ -259,16 +302,53 @@ It is wired up automatically — see below.
 
 Claude Code loads settings user → project → local, with **no user-level local
 override**, so symlinking `~/.claude/settings.json` would share every key, permission
-posture included. It is generated instead, the same two-layer shape as everything else:
+posture included. It is generated instead, in layers, the same shape as everything else:
 
-| File | Tracked | Holds |
+| File | Tracked | Applies to | Holds |
+|---|---|---|---|
+| `claude/settings.base.json` | yes | every machine | model, output style, theme, deny rules, plugins, status line |
+| `claude/settings.personal.json` | yes | `profile=personal` | hooks for a workflow only personal machines install |
+| `~/.config/dotfiles/claude-settings.json` | no | this machine | whatever this machine alone should have |
+
+Each layer wins over the one above it, and `--link` regenerates the merge.
+
+**A hook belongs in the personal layer unless every machine installs the tool it
+calls.** A client machine follows that client's workflow; a hook pointing at a binary
+it never installs fails on every prompt, and `|| true` means it fails without a word.
+
+The status line path is rewritten to this repo's absolute location at generation time,
+so it works under any username.
+
+### MCP servers
+
+MCP servers are **not** in that file. Claude Code keeps them in `~/.claude.json`, next to
+`machineID`, `userID`, the OAuth account and megabytes of cache — machine state, not
+configuration. Symlinking it would share an identity.
+
+They are registered through the CLI instead, from the same two tracked layers:
+
+| File | Applies to | Servers |
 |---|---|---|
-| `claude/settings.base.json` | yes | model, output style, theme, deny rules, hooks, status line |
-| `~/.config/dotfiles/claude-settings.json` | no | whatever this machine alone should have |
+| `claude/mcp.base.json` | every machine | `chrome-devtools` |
+| `claude/mcp.work.json` | `profile=work` | `context7` |
+| `claude/mcp.personal.json` | `profile=personal` | — (none yet; created when one is needed) |
 
-The local file wins on any key it defines, and `--link` regenerates the merge. The status
-line path is rewritten to this repo's absolute location at generation time, so it works
-under any username.
+The per-profile file is named after the profile, so adding one is creating
+`claude/mcp.<profile>.json` and nothing else.
+
+`--link` registers anything missing and leaves anything already present alone, so a token
+or OAuth grant Claude Code stored itself is never clobbered. A server whose command is not
+on `PATH` is skipped with a warning rather than registered into a startup failure.
+
+**Only servers nothing else owns belong here.** On a personal machine `context7` and
+`engram` are components of the `gentle-ai` install, which pins their versions to its own
+release. Declaring them in the base layer as well would mean two owners for one key, and a
+version frozen at whatever it happened to be the day it was copied.
+
+That is exactly why `context7` sits in the **work** layer rather than the base one: a work
+machine installs no `gentle-ai`, so nothing there competes for the key. It is declared
+unpinned, so the two copies can never disagree about a version. `engram` is personal by
+design and is not replaced on a work machine at all.
 
 **`permissions.defaultMode` belongs in the local file, not the base.** Running with
 `bypassPermissions` is a decision about one machine and one codebase; sharing it would
