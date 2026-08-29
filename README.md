@@ -69,6 +69,7 @@ waits. If you skip it, the rest of the setup still completes and it tells you to
 | `./install.sh --show-signing-key` | Print the signing key and where to register it |
 | `./install.sh --purge-overlay` | Erase all machine-local config. For handing a laptop back |
 | `./install.sh --dump` | Snapshot current Homebrew state to `Brewfile.new` |
+| `./install.sh --prune-packages` | List packages no Brewfile declares any more. `--yes` uninstalls them |
 
 Package groups: `dev`, `productivity`, `macos`, `streaming`, `fonts`.
 The base `Brewfile` always applies; groups are optional on top of it.
@@ -77,6 +78,32 @@ The base `Brewfile` always applies; groups are optional on top of it.
 ./install.sh --packages dev,macos        # only these
 ./install.sh --skip-packages streaming   # everything except these
 ```
+
+### Removing a package
+
+Delete the line from its Brewfile, then:
+
+```sh
+./install.sh --prune-packages           # lists what would go. Uninstalls nothing
+./install.sh --prune-packages --yes     # actually uninstalls
+```
+
+`brew bundle cleanup` uninstalls whatever a Brewfile does not name, so the file it is
+given decides what survives. This one is built from **every Brewfile that could apply to
+this machine**, never the subset installed this run — `--packages` and `--skip-packages`
+are deliberately ignored, or `--packages dev` would read as *"fonts, macos, productivity
+and streaming are no longer wanted"* and take four groups with it. Both provider
+Brewfiles are included for the same reason: moving a machine to Bitwarden is not a
+request to uninstall the 1Password CLI.
+
+On a work machine the client's packages live in the overlay, which is unreadable until
+the vault is unlocked, so pruning before `--sync-overlay` **refuses** rather than
+uninstalling that client's entire toolchain.
+
+The dry run lists every formula and cask on the machine that no Brewfile names — which
+includes anything installed by hand. Read it before passing `--yes`, and add whatever
+you want to keep to the right Brewfile first. It is not wired into `--update` on
+purpose: uninstalling by default is not a thing an update should do.
 
 ## Adopting a machine that already exists
 

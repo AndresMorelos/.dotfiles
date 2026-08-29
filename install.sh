@@ -29,6 +29,8 @@ source "$DOTFILES_DIR/lib/iterm.sh"
 ALL_GROUPS=(dev productivity macos streaming fonts)
 
 ACTION="bootstrap"
+PRUNE_CONFIRMED=0
+PRUNE_TMP=""
 declare -a SELECTED_GROUPS=()
 declare -a SKIP_GROUPS=()
 
@@ -52,6 +54,8 @@ Commands (default: full bootstrap):
                             its existing identity, keys and packages.
   --doctor                  Report profile, links, packages, and neutrality.
   --dump                    Write current Homebrew state to Brewfile.new.
+  --prune-packages          Uninstall packages no Brewfile declares any more.
+                            Lists them and stops; add --yes to actually remove.
   --help, -h                Show this message.
 
 Profile options (persisted to ~/.config/dotfiles/config, never committed):
@@ -67,6 +71,10 @@ Profile options (persisted to ~/.config/dotfiles/config, never committed):
 Package options:
   --packages GROUPS         Comma-separated groups to install
   --skip-packages GROUPS    Comma-separated groups to skip
+  --yes, -y                 Confirm --prune-packages. Without it, it is a dry run.
+
+Group flags do NOT narrow --prune-packages: it always reads every Brewfile that
+could apply to this machine, so skipping a group never uninstalls it.
 
 Package groups:
   dev           cursor, iterm2, cleanshot, slack, tableplus, orbstack, ...
@@ -107,6 +115,8 @@ parse_args() {
             --doctor) ACTION="doctor" ;;
             --dump) ACTION="dump" ;;
             --adopt) ACTION="adopt" ;;
+            --prune-packages) ACTION="prune" ;;
+            --yes | -y) PRUNE_CONFIRMED=1 ;;
             --profile)
                 CLI_PROFILE="${2:?--profile needs a value}"
                 shift
@@ -294,6 +304,91 @@ cleanup_brew() {
     brew autoremove >/dev/null 2>&1 || true
     ok "done"
 }
+
+# Every Brewfile that COULD apply to this machine - not the subset selected for
+# this run. `brew bundle cleanup` uninstalls whatever a Brewfile does not name,
+# so feeding it active_brewfiles() would read "--packages dev" as "the user no
+# longer wants fonts" and uninstall four groups nobody touched.
+#
+# Group flags are ignored here for the same reason, and BOTH providers are
+# included: switching a machine to Bitwarden is not a request to uninstall the
+# 1Password CLI it may still need to unlock a vault.
+prunable_brewfiles() {
+    local -a files=("$DOTFILES_DIR/Brewfile")
+    local g
+
+    for g in "${ALL_GROUPS[@]}"; do
+        files+=("$DOTFILES_DIR/Brewfile.$g")
+    done
+
+    files+=("$DOTFILES_DIR/Brewfile.provider.onepassword")
+    files+=("$DOTFILES_DIR/Brewfile.provider.bitwarden")
+
+    [[ "$DOTFILES_PROFILE" == "personal" ]] &&
+        files+=("$DOTFILES_DIR/profiles/personal/Brewfile")
+
+    [[ -n "$DOTFILES_LOCAL" && -f "$DOTFILES_LOCAL/Brewfile" ]] &&
+        files+=("$DOTFILES_LOCAL/Brewfile")
+
+    local f
+    for f in "${files[@]}"; do
+        [[ -f "$f" ]] && printf '%s\n' "$f"
+    done
+}
+
+# A client's packages live in its overlay, which is unreadable until the vault
+# is unlocked. Pruning without it would uninstall the client's entire toolchain
+# and report success, so refuse instead of guessing.
+prune_guard() {
+    [[ "$DOTFILES_PROFILE" == "work" ]] || return 0
+    [[ -n "$DOTFILES_LOCAL" && -d "$DOTFILES_LOCAL" ]] && return 0
+    die "this machine's overlay is not synced; run ./install.sh --sync-overlay first
+   Pruning now would uninstall every package this client's overlay declares."
+}
+
+cmd_prune() {
+    profile_load || die "no machine profile found; run ./install.sh first"
+    prune_guard
+
+    # Not a local: the trap below runs after this function's locals are gone.
+    PRUNE_TMP="$(mktemp -t dotfiles-prune)" || die "could not create a temporary Brewfile"
+    trap 'rm -f "${PRUNE_TMP:-}"' EXIT
+    local combined="$PRUNE_TMP"
+
+    local f
+    info "Reading every Brewfile that applies to a $DOTFILES_PROFILE machine..."
+    while IFS= read -r f; do
+        step "  ${f#"$DOTFILES_DIR"/}"
+        cat "$f" >>"$combined"
+        printf '\n' >>"$combined"
+    done < <(prunable_brewfiles)
+    echo
+
+    # Formulae and casks only. Taps, Mac App Store apps and editor extensions
+    # are not fully declared in this repo, so cleaning them would remove things
+    # no Brewfile ever promised to track.
+    if [[ $PRUNE_CONFIRMED -eq 1 ]]; then
+        warn "Uninstalling everything no Brewfile declares..."
+        brew bundle cleanup --file="$combined" --formula --cask --force ||
+            die "cleanup failed; nothing else was changed"
+        ok "Packages now match the Brewfiles."
+    else
+        info "Dry run - nothing will be uninstalled."
+        # Stop at the cache section: `brew cleanup` reclaiming download caches is
+        # not a package removal, and hundreds of lines of it hide the few names
+        # that actually matter.
+        HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 \
+            brew bundle cleanup --file="$combined" --formula --cask </dev/null 2>&1 |
+            sed -n '/^Would uninstall/,$p' |
+            sed -n '/^Would .brew cleanup/q; p' || true
+        echo
+        warn "This lists EVERY formula and cask brew knows about that no Brewfile names,"
+        echo "         including anything installed by hand for a one-off task."
+        echo "         Add what you want to keep to a Brewfile, then run:"
+        echo "           ./install.sh --prune-packages --yes"
+    fi
+}
+
 
 # ----------------------------------------------------------------------- zsh
 
@@ -681,6 +776,7 @@ main() {
         doctor) cmd_doctor ;;
         dump) cmd_dump ;;
         adopt) cmd_adopt ;;
+        prune) cmd_prune ;;
     esac
 }
 
