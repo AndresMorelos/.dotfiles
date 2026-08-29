@@ -4,20 +4,41 @@
 #
 # Claude Code loads settings user -> project -> local, with no user-level local
 # override, so symlinking ~/.claude/settings.json would share EVERY key -
-# including the permission posture. Instead the file is generated:
+# including the permission posture. Instead the file is generated from three
+# layers, each one winning over the one above it:
 #
-#   claude/settings.base.json                    tracked, shared by every machine
+#   claude/settings.base.json                    tracked, every machine
+#   claude/settings.personal.json                tracked, personal machines only
 #   ~/.config/dotfiles/claude-settings.json      untracked, this machine only
 #
-# The local file wins on any key it defines.
+# The personal layer exists because a client machine runs that client's
+# workflow, not ours. A hook pointing at a tool a work machine never installs
+# would fail on every single prompt, silently.
 
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 CLAUDE_LOCAL_SETTINGS="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/claude-settings.json"
 CLAUDE_STAMP="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/.claude-settings.sha"
 
+# The layers that apply to this machine, in merge order. Echoes one path a line.
+claude_layers() {
+    printf '%s\n' "$DOTFILES_DIR/claude/settings.base.json"
+    [[ "$DOTFILES_PROFILE" == "personal" && -f "$DOTFILES_DIR/claude/settings.personal.json" ]] &&
+        printf '%s\n' "$DOTFILES_DIR/claude/settings.personal.json"
+    printf '%s\n' "$CLAUDE_LOCAL_SETTINGS"
+}
+
+# Merge every layer and point statusLine at wherever this repo actually lives.
+claude_merge() {
+    local -a layers=()
+    while IFS= read -r line; do layers+=("$line"); done < <(claude_layers)
+    jq -s --arg dir "$DOTFILES_DIR" '
+        reduce .[] as $l ({}; . * $l)
+        | if .statusLine then .statusLine.command = ($dir + "/claude/statusline.sh") else . end
+    ' "${layers[@]}" 2>/dev/null
+}
+
 claude_settings_apply() {
-    local base="$DOTFILES_DIR/claude/settings.base.json"
-    [[ -f "$base" ]] || return 0
+    [[ -f "$DOTFILES_DIR/claude/settings.base.json" ]] || return 0
 
     if ! has jq; then
         warn "jq not installed; leaving ~/.claude/settings.json alone"
@@ -39,12 +60,11 @@ claude_settings_apply() {
     fi
 
     local merged
-    merged="$(
-        jq -s --arg dir "$DOTFILES_DIR" '
-            (.[0] * .[1])
-            | if .statusLine then .statusLine.command = ($dir + "/claude/statusline.sh") else . end
-        ' "$base" "$CLAUDE_LOCAL_SETTINGS" 2>/dev/null
-    )" || {
+    merged="$(claude_merge)" || {
+        err "could not merge Claude settings; leaving the existing file alone"
+        return 0
+    }
+    [[ -n "$merged" ]] || {
         err "could not merge Claude settings; leaving the existing file alone"
         return 0
     }
@@ -62,12 +82,8 @@ claude_report_drift() {
     cp "$CLAUDE_SETTINGS" "$backup"
 
     local expected drifted
-    # Apply the same statusLine rewrite the generator does, or the placeholder
-    # in the base would show up as drift on every single run.
-    expected="$(jq -s --arg dir "$DOTFILES_DIR" '
-        (.[0] * .[1])
-        | if .statusLine then .statusLine.command = ($dir + "/claude/statusline.sh") else . end
-    ' "$DOTFILES_DIR/claude/settings.base.json" "$CLAUDE_LOCAL_SETTINGS" 2>/dev/null || echo '{}')"
+    expected="$(claude_merge)"
+    [[ -n "$expected" ]] || expected='{}'
     drifted="$(jq -r --argjson e "$expected" '
         to_entries
         | map(select(.value != ($e[.key])))
@@ -79,5 +95,6 @@ claude_report_drift() {
     echo "         a copy is at ${backup/#$HOME/~}"
     echo "         keep any you want by moving them into:"
     echo "           ${CLAUDE_LOCAL_SETTINGS/#$HOME/~}   (this machine only)"
+    echo "           claude/settings.personal.json              (personal machines)"
     echo "           claude/settings.base.json                  (every machine)"
 }

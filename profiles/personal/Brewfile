@@ -1,3 +1,10 @@
 # Personal-machine-only apps.
 # Anything that belongs to a package group lives in that group's Brewfile,
 # not here, so it is never installed twice.
+
+# AI coding workflow. Personal only: a client machine follows that client's
+# workflow, and claude/settings.personal.json is the matching settings layer.
+tap "gentleman-programming/tap"
+brew "gentle-ai"
+brew "engram"
+brew "gga"        # Gentleman Guardian Angel, AI code review

@@ -259,16 +259,22 @@ It is wired up automatically — see below.
 
 Claude Code loads settings user → project → local, with **no user-level local
 override**, so symlinking `~/.claude/settings.json` would share every key, permission
-posture included. It is generated instead, the same two-layer shape as everything else:
+posture included. It is generated instead, in layers, the same shape as everything else:
 
-| File | Tracked | Holds |
-|---|---|---|
-| `claude/settings.base.json` | yes | model, output style, theme, deny rules, hooks, status line |
-| `~/.config/dotfiles/claude-settings.json` | no | whatever this machine alone should have |
+| File | Tracked | Applies to | Holds |
+|---|---|---|---|
+| `claude/settings.base.json` | yes | every machine | model, output style, theme, deny rules, status line |
+| `claude/settings.personal.json` | yes | `profile=personal` | hooks for a workflow only personal machines install |
+| `~/.config/dotfiles/claude-settings.json` | no | this machine | whatever this machine alone should have |
 
-The local file wins on any key it defines, and `--link` regenerates the merge. The status
-line path is rewritten to this repo's absolute location at generation time, so it works
-under any username.
+Each layer wins over the one above it, and `--link` regenerates the merge.
+
+**A hook belongs in the personal layer unless every machine installs the tool it
+calls.** A client machine follows that client's workflow; a hook pointing at a binary
+it never installs fails on every prompt, and `|| true` means it fails without a word.
+
+The status line path is rewritten to this repo's absolute location at generation time,
+so it works under any username.
 
 **`permissions.defaultMode` belongs in the local file, not the base.** Running with
 `bypassPermissions` is a decision about one machine and one codebase; sharing it would
