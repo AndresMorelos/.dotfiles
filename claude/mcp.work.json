@@ -1,0 +1,6 @@
+{
+  "context7": {
+    "command": "npx",
+    "args": ["-y", "--package=@upstash/context7-mcp@latest", "--", "context7-mcp"]
+  }
+}

@@ -290,7 +290,7 @@ posture included. It is generated instead, in layers, the same shape as everythi
 
 | File | Tracked | Applies to | Holds |
 |---|---|---|---|
-| `claude/settings.base.json` | yes | every machine | model, output style, theme, deny rules, status line |
+| `claude/settings.base.json` | yes | every machine | model, output style, theme, deny rules, plugins, status line |
 | `claude/settings.personal.json` | yes | `profile=personal` | hooks for a workflow only personal machines install |
 | `~/.config/dotfiles/claude-settings.json` | no | this machine | whatever this machine alone should have |
 
@@ -302,6 +302,37 @@ it never installs fails on every prompt, and `|| true` means it fails without a 
 
 The status line path is rewritten to this repo's absolute location at generation time,
 so it works under any username.
+
+### MCP servers
+
+MCP servers are **not** in that file. Claude Code keeps them in `~/.claude.json`, next to
+`machineID`, `userID`, the OAuth account and megabytes of cache — machine state, not
+configuration. Symlinking it would share an identity.
+
+They are registered through the CLI instead, from the same two tracked layers:
+
+| File | Applies to | Servers |
+|---|---|---|
+| `claude/mcp.base.json` | every machine | `chrome-devtools` |
+| `claude/mcp.work.json` | `profile=work` | `context7` |
+| `claude/mcp.personal.json` | `profile=personal` | — (none yet; created when one is needed) |
+
+The per-profile file is named after the profile, so adding one is creating
+`claude/mcp.<profile>.json` and nothing else.
+
+`--link` registers anything missing and leaves anything already present alone, so a token
+or OAuth grant Claude Code stored itself is never clobbered. A server whose command is not
+on `PATH` is skipped with a warning rather than registered into a startup failure.
+
+**Only servers nothing else owns belong here.** On a personal machine `context7` and
+`engram` are components of the `gentle-ai` install, which pins their versions to its own
+release. Declaring them in the base layer as well would mean two owners for one key, and a
+version frozen at whatever it happened to be the day it was copied.
+
+That is exactly why `context7` sits in the **work** layer rather than the base one: a work
+machine installs no `gentle-ai`, so nothing there competes for the key. It is declared
+unpinned, so the two copies can never disagree about a version. `engram` is personal by
+design and is not replaced on a work machine at all.
 
 **`permissions.defaultMode` belongs in the local file, not the base.** Running with
 `bypassPermissions` is a decision about one machine and one codebase; sharing it would

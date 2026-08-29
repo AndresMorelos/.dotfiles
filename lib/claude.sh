@@ -98,3 +98,70 @@ claude_report_drift() {
     echo "           claude/settings.personal.json              (personal machines)"
     echo "           claude/settings.base.json                  (every machine)"
 }
+
+# MCP servers.
+#
+# These live in ~/.claude.json, which also holds machineID, userID, the OAuth
+# account and megabytes of cache - machine state, not configuration. Symlinking
+# it would share an identity; so the servers are registered through the CLI
+# instead, from tracked declarations:
+#
+#   claude/mcp.base.json       every machine
+#   claude/mcp.personal.json   personal machines only, if it exists
+#   claude/mcp.work.json       work machines only
+#
+# Only servers nothing else owns belong in those files. A personal machine's
+# context7 and engram are installed by gentle-ai, which pins their versions to
+# its own release - declaring them here too would mean two owners for one key
+# and a version frozen at whatever it happened to be the day it was copied.
+#
+# context7 is in the work layer for exactly that reason: a work machine has no
+# gentle-ai to install it, and nothing there competes for the key. It is left
+# unpinned, so the two copies can never disagree about a version.
+#
+# Registration is idempotent: a server already present is left alone, so this
+# never clobbers a token or an OAuth grant Claude Code stored itself.
+claude_mcp_files() {
+    printf '%s\n' "$DOTFILES_DIR/claude/mcp.base.json"
+    printf '%s\n' "$DOTFILES_DIR/claude/mcp.$DOTFILES_PROFILE.json"
+    return 0
+}
+
+claude_mcp_apply() {
+    has claude || return 0
+    has jq || return 0
+
+    local existing
+    existing="$(claude mcp list 2>/dev/null | awk -F: '/:/ {print $1}')"
+
+    local file name cmd
+    local -a args
+    while IFS= read -r file; do
+        [[ -f "$file" ]] || continue
+        while IFS= read -r name; do
+            if grep -qx "$name" <<<"$existing"; then
+                step "  mcp $name (already registered)"
+                continue
+            fi
+
+            cmd="$(jq -r --arg n "$name" '.[$n].command' "$file")"
+            # A server whose binary is missing would register and then fail on
+            # every startup, so skip it and say why.
+            if ! has "$cmd"; then
+                warn "mcp $name skipped: '$cmd' is not on PATH"
+                continue
+            fi
+
+            args=()
+            while IFS= read -r a; do args+=("$a"); done < <(
+                jq -r --arg n "$name" '.[$n].args[]?' "$file"
+            )
+
+            if claude mcp add -s user "$name" -- "$cmd" "${args[@]}" >/dev/null 2>&1; then
+                ok "  mcp $name registered"
+            else
+                warn "mcp $name could not be registered"
+            fi
+        done < <(jq -r 'keys[]' "$file")
+    done < <(claude_mcp_files)
+}
