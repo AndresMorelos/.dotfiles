@@ -1,4 +1,4 @@
-cask "cursor"
+cask "visual-studio-code"
 cask "iterm2"
 cask "cleanshot"
 cask "pixelsnap"
