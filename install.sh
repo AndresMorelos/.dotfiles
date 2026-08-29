@@ -26,7 +26,7 @@ source "$DOTFILES_DIR/lib/claude.sh"
 # shellcheck source=lib/iterm.sh
 source "$DOTFILES_DIR/lib/iterm.sh"
 
-ALL_GROUPS=(dev productivity macos streaming fonts)
+ALL_GROUPS=(dev infra productivity macos streaming fonts)
 
 ACTION="bootstrap"
 PRUNE_CONFIRMED=0
@@ -77,11 +77,9 @@ Group flags do NOT narrow --prune-packages: it always reads every Brewfile that
 could apply to this machine, so skipping a group never uninstalls it.
 
 Package groups:
-  dev           cursor, iterm2, cleanshot, slack, tableplus, orbstack, ...
-  productivity  numi, raycast, rectangle
-  macos         monitorcontrol, istat-menus
-  streaming     spotify
-  fonts         font-fira-code-nerd-font
+$(for g in "${ALL_GROUPS[@]}"; do printf '  %-14s%s\n' "$g" "$(group_description "$g")"; done)
+
+Asked once on a first run and remembered in ~/.config/dotfiles/config.
 
 The base Brewfile is always applied; groups are optional on top of it.
 
@@ -217,18 +215,99 @@ install_brew() {
 
 # ------------------------------------------------------------------- packages
 
+# One description per group, so the help text, the prompt and --doctor cannot
+# drift apart. They already had: the help text still advertised Cursor long
+# after the Brewfile stopped installing it.
+group_description() {
+    case "$1" in
+        dev) echo "editor, terminal, DB client, containers" ;;
+        infra) echo "docker and kubernetes tooling" ;;
+        productivity) echo "numi, raycast, rectangle" ;;
+        macos) echo "monitorcontrol, istat-menus" ;;
+        streaming) echo "spotify" ;;
+        fonts) echo "nerd fonts" ;;
+        *) echo "" ;;
+    esac
+}
+
+# Ask once, on a first run, and remember the answer next to every other
+# machine-local decision. Asking again on each --update would be noise, and
+# defaulting silently to everything installs a Kubernetes toolchain on a laptop
+# that only ever needed a terminal.
+groups_prompt() {
+    # No terminal means no answer. A piped or CI run keeps the old behaviour -
+    # everything - rather than blocking forever on a read nobody can see.
+    [[ -t 0 ]] || return 0
+
+    local g desc
+    echo
+    info "Which package groups should this machine install?"
+    for g in "${ALL_GROUPS[@]}"; do
+        desc="$(group_description "$g")"
+        printf '   %-14s %s
+' "$g" "$desc"
+    done
+    echo
+    echo "   The base Brewfile is always installed on top of whatever you pick."
+    printf 'Groups, comma-separated [all]: '
+
+    local reply
+    read -r reply
+    reply="${reply// /}"
+
+    if [[ -z "$reply" || "$reply" == "all" ]]; then
+        DOTFILES_GROUPS="$(
+            IFS=,
+            echo "${ALL_GROUPS[*]}"
+        )"
+    elif [[ "$reply" == "none" ]]; then
+        # Recorded as a real answer, not an empty one, or the next run would
+        # read "no groups chosen" as "never asked" and ask again.
+        DOTFILES_GROUPS="none"
+    else
+        local -a picked=()
+        while IFS= read -r g; do
+            [[ -z "$g" ]] && continue
+            _is_group "$g" || die "unknown package group: '$g' (known: ${ALL_GROUPS[*]})"
+            picked+=("$g")
+        done < <(tr ',' '\n' <<<"$reply")
+        DOTFILES_GROUPS="$(
+            IFS=,
+            echo "${picked[*]}"
+        )"
+    fi
+
+    profile_save >/dev/null
+    ok "Package groups: $DOTFILES_GROUPS"
+    echo
+}
+
+# Precedence: what the command line said, then what this machine answered once,
+# then everything. A flag wins over the stored answer for the same reason it
+# wins over the stored profile - a saved mistake has to stay correctable.
 resolve_groups() {
     local -a resolved=()
+    local -a candidates=()
     local g
 
     if [[ ${#SELECTED_GROUPS[@]} -gt 0 ]]; then
-        resolved=("${SELECTED_GROUPS[@]}")
+        candidates=("${SELECTED_GROUPS[@]}")
+    elif [[ "$DOTFILES_GROUPS" == "none" ]]; then
+        return 0
+    elif [[ -n "$DOTFILES_GROUPS" ]]; then
+        while IFS= read -r g; do
+            [[ -n "$g" ]] && candidates+=("$g")
+        done < <(tr ',' '\n' <<<"$DOTFILES_GROUPS")
     else
-        for g in "${ALL_GROUPS[@]}"; do
-            _in_list "$g" "${SKIP_GROUPS[@]:-}" && continue
-            resolved+=("$g")
-        done
+        candidates=("${ALL_GROUPS[@]}")
     fi
+
+    # --skip-packages applies to whatever the list turned out to be, so it can
+    # trim a stored answer for one run without rewriting it.
+    for g in "${candidates[@]}"; do
+        _in_list "$g" "${SKIP_GROUPS[@]:-}" && continue
+        resolved+=("$g")
+    done
     printf '%s\n' "${resolved[@]:-}"
 }
 
@@ -282,6 +361,20 @@ _app_installed_manually() {
 }
 
 install_brew_packages() {
+    # A first run has no stored answer yet. Ask before spending ten minutes
+    # installing groups nobody asked for.
+    if [[ ${#SELECTED_GROUPS[@]} -eq 0 && -z "$DOTFILES_GROUPS" ]]; then
+        groups_prompt
+    elif [[ ${#SELECTED_GROUPS[@]} -gt 0 ]]; then
+        # An explicit --packages is an answer too; remember it like the profile
+        # flags are remembered, so --update keeps honouring it.
+        DOTFILES_GROUPS="$(
+            IFS=,
+            echo "${SELECTED_GROUPS[*]}"
+        )"
+        profile_save >/dev/null
+    fi
+
     info "Installing packages with brew bundle..."
     brew update >/dev/null 2>&1 || warn "brew update failed; continuing with the local index"
 
@@ -388,7 +481,6 @@ cmd_prune() {
         echo "           ./install.sh --prune-packages --yes"
     fi
 }
-
 
 # ----------------------------------------------------------------------- zsh
 

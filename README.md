@@ -71,13 +71,29 @@ waits. If you skip it, the rest of the setup still completes and it tells you to
 | `./install.sh --dump` | Snapshot current Homebrew state to `Brewfile.new` |
 | `./install.sh --prune-packages` | List packages no Brewfile declares any more. `--yes` uninstalls them |
 
-Package groups: `dev`, `productivity`, `macos`, `streaming`, `fonts`.
+Package groups: `dev`, `infra`, `productivity`, `macos`, `streaming`, `fonts`.
 The base `Brewfile` always applies; groups are optional on top of it.
 
+A first run **asks** which groups this machine wants, and stores the answer in
+`~/.config/dotfiles/config` next to every other machine-local decision. `--update`
+honours it instead of asking again, because a question you answer on every update is
+noise — and because silently defaulting to everything installs a Kubernetes toolchain
+on a laptop that only ever needed a terminal.
+
+There is nobody to ask when there is no terminal, so a piped or CI run skips the
+question and installs every group, exactly as it did before.
+
 ```sh
-./install.sh --packages dev,macos        # only these
-./install.sh --skip-packages streaming   # everything except these
+./install.sh --packages dev,macos        # only these, and remember it
+./install.sh --skip-packages streaming   # trim this one run, keep the stored answer
 ```
+
+`--packages` is remembered the same way the profile flags are, so a stored answer stays
+correctable from the command line. `--skip-packages` deliberately is not: it trims
+whatever the list turned out to be, for one run, without rewriting what you chose.
+
+Answering `none` is a real answer and is stored as one — otherwise the next run would
+read an empty value as *"never asked"* and ask again.
 
 ### Removing a package
 
