@@ -1,7 +1,9 @@
 tap "nikolaeu/numi"
+tap "simonsruggi/tap"
 
 cask "numi"
 brew "numi-cli"   # the same calculator from the shell; ships in Numi's own tap
 
 cask "raycast"
 cask "rectangle"
+cask "stockdock"  # menu bar stock tracker; ships in its author's own tap

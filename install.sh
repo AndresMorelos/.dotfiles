@@ -360,6 +360,38 @@ _app_installed_manually() {
     return 1
 }
 
+# Homebrew 6 refuses to load a formula or cask from a third-party tap until the
+# tap is trusted, which turns any Brewfile that names one into a hard failure on
+# a fresh machine. The Brewfiles in this repo ARE the trust decision: if a tap is
+# declared here, this machine wants it. Trust each declared tap up front so
+# `brew bundle` can read it.
+trust_declared_taps() {
+    brew trust --help >/dev/null 2>&1 || return 0   # Homebrew older than the trust gate
+
+    # jq itself comes from the base Brewfile, so on a clean machine it is not
+    # here yet. Without it we skip the "already trusted?" check and just trust
+    # every declared tap - `brew trust` is idempotent, so that is only noise.
+    local t
+    local -a trusted=()
+    if has jq; then
+        while IFS= read -r t; do
+            [[ -n "$t" ]] && trusted+=("$t")
+        done < <(brew trust --json v1 2>/dev/null | jq -r '.taps[]? // empty')
+    fi
+
+    local f tap
+    while IFS= read -r f; do
+        while IFS= read -r tap; do
+            [[ -z "$tap" ]] && continue
+            _in_list "$tap" "${trusted[@]:-}" && continue
+            step "  trusting tap $tap"
+            brew trust --tap "$tap" >/dev/null 2>&1 ||
+                warn "could not trust $tap; packages from it will be skipped"
+            trusted+=("$tap")
+        done < <(sed -n 's/^[[:space:]]*tap[[:space:]]*"\([^"]*\)".*/\1/p' "$f")
+    done < <(active_brewfiles)
+}
+
 install_brew_packages() {
     # A first run has no stored answer yet. Ask before spending ten minutes
     # installing groups nobody asked for.
@@ -377,6 +409,8 @@ install_brew_packages() {
 
     info "Installing packages with brew bundle..."
     brew update >/dev/null 2>&1 || warn "brew update failed; continuing with the local index"
+
+    trust_declared_taps
 
     # --adopt lets brew take over an app that was installed by hand instead of
     # refusing or clobbering it. Without this, any machine that predates these
