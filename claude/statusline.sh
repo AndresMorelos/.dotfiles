@@ -59,13 +59,20 @@ pct_colour() {
 # resets_at may be epoch seconds or an ISO timestamp; if neither parses, say
 # nothing rather than print something wrong.
 until_reset() {
-    local at="$1" target now diff
+    local at="$1" stamp target now diff
     [[ -z "$at" ]] && return 0
     if [[ "$at" =~ ^[0-9]+$ ]]; then
         target="$at"
         [[ ${#at} -ge 13 ]] && target=$((at / 1000))
     else
-        target="$(date -j -f '%Y-%m-%dT%H:%M:%S' "${at%%.*}" +%s 2>/dev/null)" || return 0
+        # ISO 8601 in UTC. Drop the fractional seconds and the zone suffix,
+        # then parse with TZ=UTC: BSD date -f ignores a trailing Z and would
+        # otherwise read the stamp as local time, which is wrong by exactly
+        # the machine's offset.
+        stamp="${at%%.*}"
+        stamp="${stamp%Z}"
+        stamp="${stamp%+00:00}"
+        target="$(TZ=UTC date -j -f '%Y-%m-%dT%H:%M:%S' "$stamp" +%s 2>/dev/null)" || return 0
     fi
     [[ -z "$target" ]] && return 0
     now="$(date +%s)"
