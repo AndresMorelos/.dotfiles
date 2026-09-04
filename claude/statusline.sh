@@ -81,9 +81,11 @@ until_reset() {
     if [[ "$diff" -lt 3600 ]]; then
         printf '%dm' $((diff / 60))
     elif [[ "$diff" -lt 86400 ]]; then
-        printf '%dh' $((diff / 3600))
+        # Minutes still matter at this range: "4h" and "4h55m" are different
+        # decisions about whether to start something now.
+        printf '%dh%02dm' $((diff / 3600)) $((diff % 3600 / 60))
     else
-        printf '%dd' $((diff / 86400))
+        printf '%dd%dh' $((diff / 86400)) $((diff % 86400 / 3600))
     fi
 }
 
@@ -161,8 +163,9 @@ if [[ -n "$ctx_pct" ]] && [[ "${ctx_pct%%.*}" -ge 50 ]]; then
     segments+=("$(pct_colour "$ctx_pct")$(printf 'ctx %.0f%%' "$ctx_pct")${C_RESET}")
 fi
 
-# Plan limits. The reset countdown appears only when the window is nearly
-# spent - that is the moment it stops being trivia and starts being a plan.
+# Plan limits, each with the time left until the window resets. The countdown
+# is what turns a percentage into a decision: 70% with 20m to go is free, 70%
+# with 4h to go is a budget.
 for w in "5h|$h5_pct|$h5_at" "7d|$d7_pct|$d7_at"; do
     label="${w%%|*}"
     rest="${w#*|}"
@@ -170,10 +173,8 @@ for w in "5h|$h5_pct|$h5_at" "7d|$d7_pct|$d7_at"; do
     at="${rest#*|}"
     [[ -z "$pct" ]] && continue
     seg="$(pct_colour "$pct")$(printf '%s %.0f%%' "$label" "$pct")"
-    if [[ "${pct%%.*}" -ge 80 ]]; then
-        left="$(until_reset "$at")"
-        [[ -n "$left" ]] && seg+=" ${C_DIM}(${left})$(pct_colour "$pct")"
-    fi
+    left="$(until_reset "$at")"
+    [[ -n "$left" ]] && seg+="${C_DIM} ↻${left}$(pct_colour "$pct")"
     segments+=("${seg}${C_RESET}")
 done
 
